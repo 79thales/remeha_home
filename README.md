@@ -1,66 +1,73 @@
-# Remeha Home integration for Home Assistant
-This integration lets you control your Remeha Home thermostats from Home Assistant.
+# Remeha Home — fork 79thales
 
-**Before using this integration, make sure you have set up your thermostat in the [Remeha Home](https://play.google.com/store/apps/details?id=com.bdrthermea.application.remeha) app.**
-If you are unable to use the Remeha Home app for your thermostat, this integration will not work.
+Samostatně spravovaný fork integrace Remeha Home pro Home Assistant **2026.8 a novější**.
+Zachovává doménu `remeha_home`, identifikátory zařízení a původní režimy
+`heat`, `auto`, `off` i předvolby `clock_program_1` až `clock_program_3`.
+Nainstalovaný termostat musí fungovat v oficiální aplikaci Remeha Home.
 
-There have been reports by users that this intergration will also work for Baxi, De Dietrich, and Brötje systems (and possibly other BDR Thermea products).
-You can simply log in using the credentials that you would use in the respective apps.
+## Funkce
 
-## Current features
-- All climate zones are exposed as [climate](https://www.home-assistant.io/integrations/climate/) entities with:
-    - The following modes:
-        - Auto mode: the thermostat will follow the clock program.
-        If the target temperature is changed, it will temporarily override the clock program until the next target temperature change in the schedule.
-        - Heat mode: the thermostat will be set to manual mode and continuously hold the set temperature.
-        - Off mode: the thermostat is disabled.
-    - Three presets for the three clock programs available in the Remeha Home app.
-    When a preset is selected, the integration will automatically switch the climate zone to auto mode to make sure the preset is applied.
-- Each climate zone also exposes the following sensors/switches:
-    - The next schedule setpoint
-    - The time at which the next schedule setpoint gets activated
-    - The current schedule setpoint
-    - Switch to control fireplace mode
-- Each hot water zone exposes:
-    - The water temperature and status
-    - Water heater control with modes (Schedule, Comfort, Eco) and target temperature, the same modes as in the Remeha Home app
-    - Setpoint numbers for the Comfort and Eco temperatures. The Eco temperature is only available for a hot water tank: a combi boiler doesn't keep water warm in Eco, so Remeha has no Eco temperature for it.
-    - A Boost switch to start and stop boost (if supported by the appliance). Remeha only accepts boost while the zone is in Schedule mode, so the switch gives an error in other modes. Stopping boost returns the zone to Schedule. While boosting, the water heater shows the Boost mode and its `remaining_boost_time` attribute shows how long it still runs.
-- Each appliance (CV-ketel) exposes the following sensors:
-    - The water pressure
-    - The energy consumed and delivered today for heating, hot water and cooling, for the appliance as a whole (disabled by default)
-- Each producer (heat source) of an appliance, such as the heat pump and the gas boiler of a hybrid system, is a separate device with:
-    - The energy consumed and delivered today for heating, hot water and cooling (gas boilers report the gas consumed, in m³)
-    - The seasonal efficiency (heat pumps only)
+- Opravená registrace zařízení přes `via_device_id`, včetně zón TUV a jednotlivých zdrojů energie.
+- Termostat, stav topení/chlazení, pokojová a venkovní teplota, tlak a programy.
+- Ovládání TUV: program, Comfort, Eco, cílové teploty a přepínač boost, pokud zařízení potvrdí podporu.
+- Sklon a základ topné křivky s mezemi a krokem z API.
+- Teploty jednotlivých topných aktivit programu, oddělené od aktivit chlazení.
+- Energie jednotlivých zdrojů, pokud je cloud vrací; chybějící údaje jsou neznámé a nevytvářejí falešné nuly.
+- Diagnostika dostupnosti funkcí bez identifikátorů domácnosti a přihlašovacích údajů.
+- Sériové zpracování zápisů TUV/číselných parametrů stejné zóny a kontrola hodnot před odesláním.
 
-    The energy values come from Remeha and are updated every 15 minutes. Remeha only reports them with a delay of about 2 hours, and right after midnight the values of the new day start at 0.
-    On hybrid setups where the existing gas boiler heats the hot water, such as the Remeha Elga Ace, Remeha does not report the gas used for hot water, so that sensor stays at 0.
+Instalace, načtení a restart integrace pouze čtou data. Nastavení se mění až
+výslovným použitím ovladače nebo zavoláním služby. Dostupnost konkrétních funkcí
+určuje odpověď zařízení; typ tepelného čerpadla sám o sobě nepotvrzuje jejich podporu.
 
-## Installation
+## Instalace přes HACS
 
-### Install with HACS (recommended)
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=msvisser&repository=remeha_home&category=integration)
+1. V HACS přidejte vlastní repozitář `https://github.com/79thales/remeha_home`, kategorie **Integration**.
+2. Nainstalujte vydání tohoto forku a restartujte Home Assistant.
+3. Při nové instalaci přidejte integraci **Remeha Home** a přihlaste se údaji oficiální aplikace.
 
-Do you have [HACS](https://hacs.xyz/) installed?
-Click the button or follow the instructions.
-1. Search integrations for **Remeha Home**
-1. Click `Install`
-1. Restart Home Assistant
-1. See [Setup](#setup)
+Při přechodu z původní integrace zachovejte její konfigurační položku v
+**Nastavení → Zařízení a služby**. Instalované soubory v
+`custom_components/remeha_home` musí pocházet z jednoho vydání tohoto forku.
+Původní repozitář a tento fork používají stejnou doménu a nemají se instalovat
+souběžně. Neodstraňujte existující zařízení ani entity. Před přechodem vytvořte
+zálohu a ověřte, že HACS následně sleduje tento repozitář.
 
-### Install manually
+## Ovládání a omezení
 
-1. Install this platform by creating a `custom_components` folder in the same folder as your configuration.yaml, if it doesn't already exist.
-2. Create another folder `remeha_home` in the `custom_components` folder. Copy all files from `custom_components/remeha_home` into the `remeha_home` folder.
+Boost lze spustit z programu; vypnutí boost vrátí zónu do programu. Délku
+určuje zařízení a API. Eco teplotu lze nastavovat pouze u potvrzeného zásobníku
+`dhwType=Tank`. Pokud v programu není známá aktivní teplota Comfort/Eco,
+obecný ovladač cílové teploty zápis odmítne; lze použít výslovný číselný ovladač.
 
-## Setup
-1. In Home Assitant click on `Configuration`
-1. Click on `Devices & Services`
-1. Click on `+ Add integration`
-1. Search for and select `Remeha Home`
-1. Enter your email address and password
-1. Click "Next"
-1. Enjoy
+Topná křivka se nenastavuje automaticky. Sklon je bezrozměrný, základ v °C.
+Každá změna čte aktuální křivku a zachová druhý parametr. Výpadek API,
+neznámé meze nebo požadavek mimo rozsah zápis zastaví.
 
-## API documentation
-For information on the Remeha Home API see [API documentation](documentation/api.md).
+Hlavní data se obnovují po 60 s, energie, křivka a aktivity po 15 minutách.
+Po změně se data načtou znovu. API může energetické hodnoty vracet se zpožděním;
+jejich nula není nezávislým měřením příkonu. Neznámé údaje se neodhadují.
+Podrobnosti jsou v [technické dokumentaci](documentation/FORK.md).
+
+## Vývoj a ověření
+
+Testy používají Home Assistant 2026.10.1, Python 3.14 a Linux. Cloudové API je
+simulováno; registry a platformy jsou skutečné. Spuštění:
+
+```sh
+python -m pip install -r requirements_test.txt
+pytest -q
+ruff check custom_components tests scripts/build_release.py
+```
+
+Úspěšné testy nepotvrzují podporu každého modelu nebo skutečné provedení povelu
+cloudem. Provozní ověření na zařízení musí zkontrolovat jeho data a logy.
+
+## Původ změn
+
+Základem je [msvisser/remeha_home](https://github.com/msvisser/remeha_home).
+Funkční rozšíření a jejich autorská historie byla převzata z
+[hugo-leij/remeha_home](https://github.com/hugo-leij/remeha_home), commit
+`20bf0ffa82055c1b341ae538529af4473fbbb5bf`. Poděkování patří také autorům původních
+komunitních příspěvků, jejichž commity jsou zachovány v historii.
+Vlastní opravy kompatibility, validace, diagnostika, testy a vydání spravuje tento fork.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import datetime
 import hashlib
@@ -10,15 +11,12 @@ import logging
 import secrets
 import urllib
 
-import asyncio
-from aiohttp import ClientSession
-
+from aiohttp import ClientSession, ClientTimeout
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.config_entry_oauth2_flow import (
     AbstractOAuth2Implementation,
     OAuth2Session,
 )
-from homeassistant.exceptions import ConfigEntryAuthFailed
-from aiohttp.client_exceptions import ClientResponseError
 
 from .const import DOMAIN
 
@@ -43,7 +41,13 @@ class RemehaHomeAPI:
         return self._oauth_session.token["access_token"]
 
     async def _async_api_request(self, method: str, path: str, **kwargs):
+        """Omezit čtení i uživatelský povel na 30 s; zápisy nikdy neopakovat.
+
+        OAuthSession obstará přihlášení. Timeout povelu neprokazuje, zda jej
+        server provedl, proto další stav určuje až následující čtení zařízení.
+        """
         headers = kwargs.pop("headers", {})
+        kwargs.setdefault("timeout", ClientTimeout(total=30))
         return await self._oauth_session.async_request(
             method,
             "https://api.bdrthermea.net/Mobile/api" + path,
@@ -58,9 +62,7 @@ class RemehaHomeAPI:
         """Return the Remeha Home dashboard JSON."""
         # Add a timestamp to the request to prevent caching
         timestamp = int(datetime.datetime.now().timestamp())
-        response = await self._async_api_request(
-            "GET", f"/homes/dashboard?t={timestamp}"
-        )
+        response = await self._async_api_request("GET", f"/homes/dashboard?t={timestamp}")
         response.raise_for_status()
         json = await response.json()
         _LOGGER.debug(json)
@@ -110,9 +112,7 @@ class RemehaHomeAPI:
         )
         response.raise_for_status()
 
-    async def async_activate_heating_time_program(
-        self, climate_zone_id: str, time_program_id: int
-    ):
+    async def async_activate_heating_time_program(self, climate_zone_id: str, time_program_id: int):
         """Set a climate zone to schedule mode with a specific time program."""
         response = await self._async_api_request(
             "POST",
@@ -169,9 +169,7 @@ class RemehaHomeAPI:
         )
         response.raise_for_status()
 
-    async def async_get_appliance_technical_information(
-        self, appliance_id: str
-    ) -> dict:
+    async def async_get_appliance_technical_information(self, appliance_id: str) -> dict:
         """Get technical information for an appliance."""
         response = await self._async_api_request(
             "GET",
@@ -184,7 +182,7 @@ class RemehaHomeAPI:
 
     async def async_get_consumption_data_for_today(self, appliance_id: str) -> dict:
         """Get technical information for an appliance."""
-        today = datetime.datetime.now().replace(
+        today = datetime.datetime.now(datetime.UTC).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
         end_of_today = today + datetime.timedelta(hours=23, minutes=59, seconds=59)
@@ -201,9 +199,7 @@ class RemehaHomeAPI:
         _LOGGER.debug(json)
         return json
 
-    async def async_set_dhw_comfort_setpoint(
-        self, hot_water_zone_id: str, setpoint: float
-    ):
+    async def async_set_dhw_comfort_setpoint(self, hot_water_zone_id: str, setpoint: float):
         """Set the comfort (continuous) target temperature for a DHW zone."""
         response = await self._async_api_request(
             "POST",
@@ -212,9 +208,7 @@ class RemehaHomeAPI:
         )
         response.raise_for_status()
 
-    async def async_set_dhw_reduced_setpoint(
-        self, hot_water_zone_id: str, setpoint: float
-    ):
+    async def async_set_dhw_reduced_setpoint(self, hot_water_zone_id: str, setpoint: float):
         """Set the eco/reduced target temperature for a DHW zone."""
         response = await self._async_api_request(
             "POST",
@@ -291,9 +285,7 @@ class RemehaHomeOAuth2Implementation(AbstractOAuth2Implementation):
         random_state = secrets.token_urlsafe()
         code_challenge = secrets.token_urlsafe(64)
         code_challenge_sha256 = (
-            base64.urlsafe_b64encode(
-                hashlib.sha256(code_challenge.encode("ascii")).digest()
-            )
+            base64.urlsafe_b64encode(hashlib.sha256(code_challenge.encode("ascii")).digest())
             .decode("ascii")
             .rstrip("=")
         )
@@ -324,9 +316,7 @@ class RemehaHomeOAuth2Implementation(AbstractOAuth2Implementation):
             request_id = response.headers["x-request-id"]
             state_properties_json = f'{{"TID":"{request_id}"}}'.encode("ascii")
             state_properties = (
-                base64.urlsafe_b64encode(state_properties_json)
-                .decode("ascii")
-                .rstrip("=")
+                base64.urlsafe_b64encode(state_properties_json).decode("ascii").rstrip("=")
             )
 
             # Find the CSRF token in the "x-ms-cpim-csrf" header
@@ -403,11 +393,14 @@ class RemehaHomeOAuth2Implementation(AbstractOAuth2Implementation):
 
     async def _async_request_new_token(self, grant_params):
         """Call the OAuth2 token endpoint with specific grant paramters."""
-        async with asyncio.timeout(30), self._session.post(
-            "https://remehalogin.bdrthermea.net/bdrb2cprod.onmicrosoft.com/oauth2/v2.0/token?p=B2C_1A_RPSignUpSignInNewRoomV3.1",
-            data=grant_params,
-            allow_redirects=True,
-        ) as response:
+        async with (
+            asyncio.timeout(30),
+            self._session.post(
+                "https://remehalogin.bdrthermea.net/bdrb2cprod.onmicrosoft.com/oauth2/v2.0/token?p=B2C_1A_RPSignUpSignInNewRoomV3.1",
+                data=grant_params,
+                allow_redirects=True,
+            ) as response,
+        ):
             # NOTE: The OAuth2 token request sometimes returns a "400 Bad Request" response. The root cause of this
             #       problem has not been found, but this workaround allows you to reauthenticate at least. Otherwise
             #       Home Assitant would get stuck on refreshing the token forever.

@@ -1,8 +1,8 @@
 """Platform for switch integration."""
 
 from __future__ import annotations
-import logging
 
+import logging
 
 from homeassistant.components.switch import (
     SwitchDeviceClass,
@@ -19,6 +19,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .api import RemehaHomeAPI
 from .const import DOMAIN
 from .coordinator import RemehaHomeUpdateCoordinator
+from .util import serialized_command
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,16 +36,12 @@ async def async_setup_entry(
         for climate_zone in appliance["climateZones"]:
             climate_zone_id = climate_zone["climateZoneId"]
 
-            entities.append(
-                RemehaHomeFireplaceModeSwitch(api, coordinator, climate_zone_id)
-            )
+            entities.append(RemehaHomeFireplaceModeSwitch(api, coordinator, climate_zone_id))
 
         for hot_water_zone in appliance["hotWaterZones"]:
-            if hot_water_zone.get("capabilityBoostMode", True):
+            if hot_water_zone.get("capabilityBoostMode") is True:
                 entities.append(
-                    RemehaHomeDhwBoostSwitch(
-                        api, coordinator, hot_water_zone["hotWaterZoneId"]
-                    )
+                    RemehaHomeDhwBoostSwitch(api, coordinator, hot_water_zone["hotWaterZoneId"])
                 )
 
     async_add_entities(entities)
@@ -68,9 +65,7 @@ class RemehaHomeSwitch(CoordinatorEntity, SwitchEntity):
         self.climate_zone_id = climate_zone_id
         self.entity_description = entity_description
 
-        self._attr_unique_id = "_".join(
-            [DOMAIN, self.climate_zone_id, entity_description.key]
-        )
+        self._attr_unique_id = "_".join([DOMAIN, self.climate_zone_id, entity_description.key])
 
     @property
     def _data(self):
@@ -173,8 +168,11 @@ class RemehaHomeDhwBoostSwitch(CoordinatorEntity, SwitchEntity):
         """Return device info for this device."""
         return self.coordinator.get_device_info(self.hot_water_zone_id)
 
+    @serialized_command("hot_water_zone_id")
     async def async_turn_on(self, **kwargs):
         """Start boost."""
+        if not self.available or self._data.get("capabilityBoostMode") is not True:
+            raise ServiceValidationError("Boost capability is not confirmed")
         mode = self._data.get("dhwZoneMode")
         if mode == "Boost":
             return
@@ -187,6 +185,7 @@ class RemehaHomeDhwBoostSwitch(CoordinatorEntity, SwitchEntity):
         _LOGGER.debug("Start DHW boost")
         await self._async_set_mode("Boost", self.api.async_set_hot_water_boost)
 
+    @serialized_command("hot_water_zone_id")
     async def async_turn_off(self, **kwargs):
         """Stop boost by switching back to schedule mode."""
         if not self.is_on:
@@ -197,17 +196,9 @@ class RemehaHomeDhwBoostSwitch(CoordinatorEntity, SwitchEntity):
 
     async def _async_set_mode(self, mode: str, api_call) -> None:
         """Set the zone mode, with a temporary override until the next poll."""
-        zone_data = self._data
-        previous_mode = zone_data.get("dhwZoneMode")
-        zone_data["dhwZoneMode"] = mode
+        # Stav potvrzujeme až po úspěchu API. Chyba se vrátí volající službě,
+        # zámek se uvolní a další čtení může ověřit výsledek nejistého timeoutu.
+        await api_call(self.hot_water_zone_id)
+        self._data["dhwZoneMode"] = mode
         self.async_write_ha_state()
-
-        try:
-            await api_call(self.hot_water_zone_id)
-        except Exception:
-            # Revert the temporary override, the zone did not change
-            zone_data["dhwZoneMode"] = previous_mode
-            self.async_write_ha_state()
-            raise
-
         await self.coordinator.async_request_refresh()

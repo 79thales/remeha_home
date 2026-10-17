@@ -1,8 +1,9 @@
 """Platform for Remeha Home climate integration."""
 
 from __future__ import annotations
-from typing import Any
+
 import logging
+from typing import Any
 
 from homeassistant.components.climate import (
     ATTR_HVAC_MODE,
@@ -27,37 +28,22 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def get_remeha_mode_to_hvac_mode(appliance_type: str) -> dict:
-    """Get the mapping from Remeha mode to HVAC mode based on appliance type."""
-    if appliance_type == "HeatPump":
-        return {
-            "Scheduling": HVACMode.AUTO,
-            "TemporaryOverride": HVACMode.AUTO,
-            "Manual": HVACMode.HEAT_COOL,
-            "FrostProtection": HVACMode.OFF,
-        }
-    else:
-        return {
-            "Scheduling": HVACMode.AUTO,
-            "TemporaryOverride": HVACMode.AUTO,
-            "Manual": HVACMode.HEAT,
-            "FrostProtection": HVACMode.OFF,
-        }
+    """Zachovat původní režim heat pro ruční řízení i u tepelného čerpadla.
+
+    Typ zařízení sám nepotvrzuje možnost chlazení. Naměřený stav chlazení
+    se nadále zobrazuje přes hvac_action, bez změny existujících automatizací.
+    """
+    return {
+        "Scheduling": HVACMode.AUTO,
+        "TemporaryOverride": HVACMode.AUTO,
+        "Manual": HVACMode.HEAT,
+        "FrostProtection": HVACMode.OFF,
+    }
 
 
 def get_hvac_mode_to_remeha_mode(appliance_type: str) -> dict:
-    """Get the mapping from HVAC mode to Remeha mode based on appliance type."""
-    if appliance_type == "HeatPump":
-        return {
-            HVACMode.AUTO: "Scheduling",
-            HVACMode.HEAT_COOL: "Manual",
-            HVACMode.OFF: "FrostProtection",
-        }
-    else:
-        return {
-            HVACMode.AUTO: "Scheduling",
-            HVACMode.HEAT: "Manual",
-            HVACMode.OFF: "FrostProtection",
-        }
+    """Převést pouze původní podporované režimy na požadavek API."""
+    return {HVACMode.AUTO: "Scheduling", HVACMode.HEAT: "Manual", HVACMode.OFF: "FrostProtection"}
 
 
 REMEHA_STATUS_TO_HVAC_ACTION = {
@@ -165,11 +151,7 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
     def _get_appliance_type(self) -> str:
         """Get the appliance type for this climate zone."""
         appliance_data = self._get_appliance_data()
-        return (
-            appliance_data.get("applianceType", "Boiler")
-            if appliance_data
-            else "Boiler"
-        )
+        return appliance_data.get("applianceType", "Boiler") if appliance_data else "Boiler"
 
     @property
     def current_temperature(self) -> float | None:
@@ -203,17 +185,7 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
     @property
     def hvac_modes(self) -> list[HVACMode]:
         """Return the list of available operation modes."""
-        appliance_type = self._get_appliance_type()
-        modes = [HVACMode.OFF, HVACMode.AUTO]
-
-        if appliance_type == "HeatPump":
-            # Heat pumps support both heating and cooling
-            modes.append(HVACMode.HEAT_COOL)
-        else:
-            # Regular boilers only support heating
-            modes.append(HVACMode.HEAT)
-
-        return modes
+        return [HVACMode.OFF, HVACMode.HEAT, HVACMode.AUTO]
 
     @property
     def hvac_action(self) -> HVACAction | None:
@@ -230,9 +202,7 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
             return "anti_frost"
         if self.hvac_mode in (HVACMode.HEAT, HVACMode.HEAT_COOL):
             return "manual"
-        return PRESET_INDEX_TO_PRESET_MODE[
-            self._data["activeHeatingClimateTimeProgramNumber"]
-        ]
+        return PRESET_INDEX_TO_PRESET_MODE[self._data["activeHeatingClimateTimeProgramNumber"]]
 
     @property
     def preset_modes(self) -> list[str]:
@@ -249,6 +219,8 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
                 await self.async_set_hvac_mode(requested_hvac_mode)
             return
 
+        if requested_hvac_mode is not None and requested_hvac_mode not in self.hvac_modes:
+            raise ServiceValidationError("Unsupported HVAC mode")
         current_hvac_mode = self.hvac_mode
         hvac_mode = requested_hvac_mode or current_hvac_mode
         _LOGGER.debug("Setting temperature to %f in mode %s", temperature, hvac_mode)
@@ -267,9 +239,7 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
                     self.climate_zone_id,
                     self._data["activeHeatingClimateTimeProgramNumber"],
                 )
-            await self.api.async_set_temporary_override(
-                self.climate_zone_id, temperature
-            )
+            await self.api.async_set_temporary_override(self.climate_zone_id, temperature)
         elif hvac_mode in (HVACMode.HEAT, HVACMode.HEAT_COOL):
             # Switches the zone to manual mode with the new setpoint in one request
             await self.api.async_set_manual(self.climate_zone_id, temperature)
@@ -280,6 +250,8 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new operation mode."""
+        if hvac_mode not in self.hvac_modes:
+            raise ServiceValidationError("Unsupported HVAC mode")
         _LOGGER.debug("Setting operation mode to %s", hvac_mode)
 
         # Temporarily override the coordinator state until the next poll
@@ -297,9 +269,7 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
                     zone_data["activeHeatingClimateTimeProgramNumber"],
                 )
             elif hvac_mode in (HVACMode.HEAT, HVACMode.HEAT_COOL):
-                await self.api.async_set_manual(
-                    self.climate_zone_id, zone_data["setPoint"]
-                )
+                await self.api.async_set_manual(self.climate_zone_id, zone_data["setPoint"])
             elif hvac_mode == HVACMode.OFF:
                 await self.api.async_set_off(self.climate_zone_id)
             else:
@@ -334,9 +304,7 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
 
         try:
             # Switch the selected heating time program
-            await self.api.async_activate_heating_time_program(
-                self.climate_zone_id, target_preset
-            )
+            await self.api.async_activate_heating_time_program(self.climate_zone_id, target_preset)
             # Automatically make sure the mode is set to schedule
             if previous_hvac_mode != HVACMode.AUTO:
                 await self.api.async_set_schedule(self.climate_zone_id, target_preset)

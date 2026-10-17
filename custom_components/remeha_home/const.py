@@ -1,15 +1,15 @@
 """Constants for the Remeha Home integration."""
 
+from homeassistant.components.binary_sensor import (
+    BinarySensorDeviceClass,
+    BinarySensorEntityDescription,
+)
 from homeassistant.components.sensor import (
-    SensorEntityDescription,
     SensorDeviceClass,
+    SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.components.binary_sensor import (
-    BinarySensorEntityDescription,
-    BinarySensorDeviceClass,
-)
-from homeassistant.const import UnitOfEnergy, UnitOfTemperature, UnitOfPressure, UnitOfVolume
+from homeassistant.const import UnitOfEnergy, UnitOfPressure, UnitOfTemperature, UnitOfVolume
 
 DOMAIN = "remeha_home"
 
@@ -155,7 +155,7 @@ GAS_PRODUCER_SENSOR_TYPES = [
         native_unit_of_measurement=UnitOfVolume.CUBIC_METERS,
         device_class=SensorDeviceClass.GAS,
         state_class=SensorStateClass.TOTAL_INCREASING,
-    )
+    ),
 ]
 
 CLIMATE_ZONE_SENSOR_TYPES = [
@@ -221,8 +221,9 @@ CLIMATE_ZONE_BINARY_SENSOR_TYPES = [
             entity_registry_enabled_default=False,
             device_class=BinarySensorDeviceClass.HEAT,
         ),
-        lambda value: value
-        in ["ProducingHeat", "RequestingHeat", "ProducingCold", "RequestingCold"],
+        lambda value: (
+            value in ["ProducingHeat", "RequestingHeat", "ProducingCold", "RequestingCold"]
+        ),
     )
 ]
 

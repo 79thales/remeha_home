@@ -1,8 +1,7 @@
 {
-  "name": "Remeha Home",
+  "name": "Remeha Home \u2014 79thales",
   "filename": "remeha_home.zip",
-  "homeassistant": "2025.1.4",
+  "homeassistant": "2026.8.0",
   "render_readme": true,
-  "country": "NL",
   "zip_release": true
 }

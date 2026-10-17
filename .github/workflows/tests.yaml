@@ -1,0 +1,22 @@
+name: Home Assistant tests
+# Používá skutečné registry a entity HA 2026.10.1; cloudové API je simulované.
+# Žádná přístupová data domácnosti ani síťové povely zařízení nejsou potřeba.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+      - run: python -m pip install -r requirements_test.txt
+      - run: pytest -q --timeout=60

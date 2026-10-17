@@ -1,9 +1,9 @@
 """Platform for binary sensor integration."""
 
 from __future__ import annotations
+
 import logging
 from collections.abc import Callable
-
 
 from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
@@ -16,8 +16,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
-    DOMAIN,
     CLIMATE_ZONE_BINARY_SENSOR_TYPES,
+    DOMAIN,
     HOT_WATER_ZONE_BINARY_SENSOR_TYPES,
 )
 from .coordinator import RemehaHomeUpdateCoordinator

@@ -5,10 +5,10 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import config_entry_oauth2_flow, device_registry as dr
+from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import RemehaHomeOAuth2Implementation, RemehaHomeAPI
+from .api import RemehaHomeAPI, RemehaHomeOAuth2Implementation
 from .config_flow import RemehaHomeLoginFlowHandler
 from .const import DOMAIN
 from .coordinator import RemehaHomeUpdateCoordinator
@@ -37,15 +37,14 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up Remeha Home from a config entry."""
-    implementation = (
-        await config_entry_oauth2_flow.async_get_config_entry_implementation(
-            hass, entry
-        )
+    implementation = await config_entry_oauth2_flow.async_get_config_entry_implementation(
+        hass, entry
     )
 
     oauth_session = config_entry_oauth2_flow.OAuth2Session(hass, entry, implementation)
     api = RemehaHomeAPI(oauth_session)
-    coordinator = RemehaHomeUpdateCoordinator(hass, api)
+    # Vlastník registru musí být znám už při prvním načtení dat.
+    coordinator = RemehaHomeUpdateCoordinator(hass, api, entry)
 
     await coordinator.async_config_entry_first_refresh()
 
@@ -53,12 +52,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         "api": api,
         "coordinator": coordinator,
     }
-
-    # Pre-register appliance devices so child devices can reference them via via_device
-    registry = dr.async_get(hass)
-    for device_info in coordinator.device_info.values():
-        if "via_device" not in device_info:
-            registry.async_get_or_create(config_entry_id=entry.entry_id, **device_info)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 

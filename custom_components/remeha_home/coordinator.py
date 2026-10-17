@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
-from collections import Counter
-from datetime import date, datetime, timedelta
-import logging
-
 import asyncio
-from aiohttp.client_exceptions import ClientResponseError
+import logging
+from collections import Counter
+from datetime import date, timedelta
+from math import isfinite
 
+import homeassistant.util.dt as dt_util
+from aiohttp import ClientError
+from aiohttp.client_exceptions import ClientResponseError
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from homeassistant.exceptions import ConfigEntryAuthFailed
 
 from .api import RemehaHomeAPI
 from .const import DOMAIN
@@ -42,12 +46,12 @@ PRODUCER_STATS = [
 ]
 
 APPLIANCE_CONSUMPTION_DEFAULT_DATA = {
-    "heatingEnergyConsumed": 0.0,
-    "hotWaterEnergyConsumed": 0.0,
-    "coolingEnergyConsumed": 0.0,
-    "heatingEnergyDelivered": 0.0,
-    "hotWaterEnergyDelivered": 0.0,
-    "coolingEnergyDelivered": 0.0,
+    "heatingEnergyConsumed": None,
+    "hotWaterEnergyConsumed": None,
+    "coolingEnergyConsumed": None,
+    "heatingEnergyDelivered": None,
+    "hotWaterEnergyDelivered": None,
+    "coolingEnergyDelivered": None,
 }
 
 
@@ -65,14 +69,20 @@ def get_producer_id(appliance_id: str, producer: dict) -> str:
 class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
     """Remeha Home update coordinator."""
 
-    def __init__(self, hass: HomeAssistant, api: RemehaHomeAPI) -> None:
+    def __init__(self, hass: HomeAssistant, api: RemehaHomeAPI, entry: ConfigEntry) -> None:
         """Initialize Remeha Home update coordinator."""
         super().__init__(
             hass,
             _LOGGER,
+            config_entry=entry,
             name=DOMAIN,
             update_interval=timedelta(seconds=60),
         )
+        # Jeden zámek na zónu serializuje zápisy TUV a číselných parametrů.
+        # Zámek nepřežívá restart a nevytváří žádné automatické řídicí povely.
+        self.command_locks: dict[str, asyncio.Lock] = {}
+        self.appliance_device_ids: dict[str, str] = {}
+        self.optional_data_updated = {}
         self.api = api
         self.items = {}
         self.device_info = {}
@@ -108,7 +118,8 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
             raise UpdateFailed from err
 
         # Save the current time for appliance usage data updates
-        now = datetime.now()
+        now = dt_util.utcnow()
+        device_registry = dr.async_get(self.hass)
 
         for appliance in data["appliances"]:
             appliance_id = appliance["applianceId"]
@@ -116,11 +127,9 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
 
             # Request appliance technical information the first time it is discovered
             if appliance_id not in self.technical_info:
-                self.technical_info[appliance_id] = (
-                    await self.api.async_get_appliance_technical_information(
-                        appliance_id
-                    )
-                )
+                self.technical_info[
+                    appliance_id
+                ] = await self.api.async_get_appliance_technical_information(appliance_id)
                 _LOGGER.debug(
                     "Requested technical information for appliance %s: %s",
                     appliance_id,
@@ -133,10 +142,8 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
                 >= timedelta(minutes=14, seconds=45)
             ):
                 try:
-                    consumption_data = (
-                        await self.api.async_get_consumption_data_for_today(
-                            appliance_id
-                        )
+                    consumption_data = await self.api.async_get_consumption_data_for_today(
+                        appliance_id
                     )
                     _LOGGER.debug(
                         "Requested consumption data for appliance %s: %s",
@@ -144,51 +151,35 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
                         consumption_data,
                     )
 
-                    if len(consumption_data["data"]) > 0:
-                        consumption = self._process_consumption_data(
-                            appliance, consumption_data["data"][0]
-                        )
+                    # Nula je měření jen tehdy, pokud ji API skutečně vrátí.
+                    # Prázdná odpověď, chybějící pole ani nový den nejsou nula.
+                    # Data bez potvrzené čerstvosti se zobrazí jako neznámá;
+                    # nevytváříme falešný reset denních součtů v energetice HA.
+                    rows = consumption_data.get("data") or []
+                    if rows:
+                        consumption = self._process_consumption_data(appliance, rows[0])
+                        self.appliance_consumption_data[appliance_id] = consumption
                         self.appliance_consumption_data_date[appliance_id] = now.date()
-                    elif self.appliance_consumption_data_date.get(appliance_id) == now.date():
-                        # Empty response during the day: keep today's values, a drop to 0
-                        # would be seen as a reset and double count the day's consumption
-                        _LOGGER.debug(
-                            "No consumption data found for appliance %s, keeping today's values",
-                            appliance_id,
-                        )
-                        consumption = self.appliance_consumption_data[appliance_id]
                     else:
-                        # Normal right after midnight, before the API has data for today
-                        _LOGGER.debug(
-                            "No consumption data found for appliance %s", appliance_id
-                        )
-                        consumption = dict(APPLIANCE_CONSUMPTION_DEFAULT_DATA)
-
-                    self.appliance_consumption_data[appliance_id] = consumption
-                    self.appliance_last_consumption_data_update[appliance_id] = now
+                        self.appliance_consumption_data.pop(appliance_id, None)
                 except ClientResponseError as err:
-                    _LOGGER.warning(
-                        "Failed to request consumption data for appliance %s: %s",
-                        appliance_id,
-                        err,
-                    )
-                except Exception:
-                    # Consumption data is optional, so a problem with it must never
-                    # fail the whole update and make the climate entities unavailable.
-                    # Keep the previous data and retry at the next consumption interval.
-                    _LOGGER.exception(
-                        "Failed to update consumption data for appliance %s",
-                        appliance_id,
-                    )
+                    if err.status == 401:
+                        raise ConfigEntryAuthFailed from err
+                    self.appliance_consumption_data.pop(appliance_id, None)
+                    _LOGGER.warning("Consumption request failed (HTTP %s)", err.status)
+                except (ClientError, TimeoutError, ValueError, TypeError, KeyError):
+                    # Volitelné energetické údaje nesmějí znepřístupnit termostat.
+                    self.appliance_consumption_data.pop(appliance_id, None)
+                    _LOGGER.warning("Consumption data unavailable")
+                finally:
+                    # I chybu opakujeme nejdříve za 15 minut, ne každých 60 s.
                     self.appliance_last_consumption_data_update[appliance_id] = now
 
-            # Get the cached consumption data for the appliance or use default values
-            if appliance_id in self.appliance_consumption_data:
-                appliance["consumptionData"] = self.appliance_consumption_data[
-                    appliance_id
-                ]
-            else:
-                appliance["consumptionData"] = dict(APPLIANCE_CONSUMPTION_DEFAULT_DATA)
+            if self.appliance_consumption_data_date.get(appliance_id) != now.date():
+                self.appliance_consumption_data.pop(appliance_id, None)
+            appliance["consumptionData"] = self.appliance_consumption_data.get(
+                appliance_id, dict(APPLIANCE_CONSUMPTION_DEFAULT_DATA)
+            )
 
             self.device_info[appliance_id] = DeviceInfo(
                 identifiers={(DOMAIN, appliance_id)},
@@ -197,12 +188,22 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
                 model=self.technical_info[appliance_id]["applianceName"],
             )
 
+            # Zaregistrovat rodiče před zónami; vlastník + identifikátory drží
+            # stejné ID při aktualizaci, restartu i nové instalaci. Zóny i zdroje
+            # energie používají interní ID, nikoli odstraněný parametr via_device.
+            parent = device_registry.async_get_or_create(
+                config_entry_id=self.config_entry.entry_id,
+                identifiers={(DOMAIN, appliance_id)},
+                name=appliance["houseName"],
+                manufacturer="Remeha",
+                model=self.technical_info[appliance_id]["applianceName"],
+            )
+            self.appliance_device_ids[appliance_id] = parent.id
+
             for climate_zone in appliance["climateZones"]:
                 climate_zone_id = climate_zone["climateZoneId"]
                 # This assumes that all climate zones for an appliance share the same gateway
-                gateways = self.technical_info[appliance_id][
-                    "internetConnectedGateways"
-                ]
+                gateways = self.technical_info[appliance_id]["internetConnectedGateways"]
 
                 if len(gateways) > 1:
                     _LOGGER.warning(
@@ -225,41 +226,24 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
 
                 self.items[climate_zone_id] = climate_zone
 
-                # Fetch heating curve data once (re-fetched after writes)
-                if climate_zone_id not in self.heating_curve_data:
-                    try:
-                        self.heating_curve_data[climate_zone_id] = (
-                            await self.api.async_get_heating_curve(climate_zone_id)
-                        )
-                        _LOGGER.debug(
-                            "Requested heating curve data for climate zone %s: %s",
-                            climate_zone_id,
-                            self.heating_curve_data[climate_zone_id],
-                        )
-                    except ClientResponseError as err:
-                        _LOGGER.warning(
-                            "Failed to request heating curve data for climate zone %s: %s",
-                            climate_zone_id,
-                            err,
-                        )
-
-                # Fetch activities data once (re-fetched after writes)
-                if climate_zone_id not in self.activities_data:
-                    try:
-                        self.activities_data[climate_zone_id] = (
-                            await self.api.async_get_activities(climate_zone_id)
-                        )
-                        _LOGGER.debug(
-                            "Requested activities data for climate zone %s: %s",
-                            climate_zone_id,
-                            self.activities_data[climate_zone_id],
-                        )
-                    except ClientResponseError as err:
-                        _LOGGER.warning(
-                            "Failed to request activities data for climate zone %s: %s",
-                            climate_zone_id,
-                            err,
-                        )
+                # Volitelné funkce se obnovují po 15 minutách nebo po zápisu.
+                # Chyba/timeout/absence podpory neshodí hlavní termostat.
+                await self._async_refresh_optional(
+                    climate_zone_id,
+                    "curve",
+                    self.heating_curve_data,
+                    self.api.async_get_heating_curve,
+                    now,
+                    dict,
+                )
+                await self._async_refresh_optional(
+                    climate_zone_id,
+                    "activities",
+                    self.activities_data,
+                    self.api.async_get_activities,
+                    now,
+                    list,
+                )
 
                 self.device_info[climate_zone_id] = DeviceInfo(
                     identifiers={(DOMAIN, climate_zone_id)},
@@ -268,14 +252,12 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
                     model=gateway_info["name"],
                     hw_version=gateway_info["hardwareVersion"],
                     sw_version=gateway_info["softwareVersion"],
-                    via_device=(DOMAIN, appliance_id),
+                    via_device_id=self.appliance_device_ids[appliance_id],
                 )
 
             for hot_water_zone in appliance["hotWaterZones"]:
                 hot_water_zone_id = hot_water_zone["hotWaterZoneId"]
-                hot_water_zone["dhwCurrentActivity"] = self._derive_dhw_activity(
-                    hot_water_zone
-                )
+                hot_water_zone["dhwCurrentActivity"] = self._derive_dhw_activity(hot_water_zone)
 
                 self.items[hot_water_zone_id] = hot_water_zone
                 self.device_info[hot_water_zone_id] = DeviceInfo(
@@ -283,12 +265,10 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
                     name=hot_water_zone["name"],
                     manufacturer="Remeha",
                     model="Hot Water Zone",
-                    via_device=(DOMAIN, appliance_id),
+                    via_device_id=self.appliance_device_ids[appliance_id],
                 )
 
-            self._update_producers(
-                appliance_id, get_producers(appliance["consumptionData"])
-            )
+            self._update_producers(appliance_id, get_producers(appliance["consumptionData"]))
         return data
 
     def _update_producers(self, appliance_id: str, producers: list[dict]) -> None:
@@ -313,38 +293,76 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
                 name=name,
                 manufacturer="Remeha",
                 model=producer_label,
-                via_device=(DOMAIN, appliance_id),
+                via_device_id=self.appliance_device_ids[appliance_id],
             )
 
-        # Right after midnight the API doesn't list the producers until the data
-        # for the new day is reported. Their values for the new day are 0, not the
-        # values of yesterday. The seasonal efficiency is kept, it's a running value.
+        # Chybějící zdroj neznamená nulovou spotřebu. Existující entitu ponecháme,
+        # ale měření označíme jako neznámé; po návratu API dostane skutečná data.
         known_ids = self.appliance_producer_ids.setdefault(appliance_id, set())
         for producer_id in known_ids - current_ids:
             self.items[producer_id] = {
                 **self.items[producer_id],
-                **dict.fromkeys(PRODUCER_STATS, 0.0),
+                **dict.fromkeys([*PRODUCER_STATS, "seasonalEfficiency"], None),
             }
         known_ids |= current_ids
 
+    async def _async_refresh_optional(self, zone_id, key, cache, fetch, now, expected):
+        """Načíst volitelný endpoint s 10s timeoutem a 15min intervalem.
+
+        Vstup je ID zóny a čtecí metoda API, výstup dict/list nebo None v cache.
+        None nepředstírá podporu funkce. HTTP 401 vyžádá nové přihlášení;
+        ostatní síťové chyby povolí další pokus po intervalu. Po úspěšném zápisu
+        ovladač odstraní cache, tím vynutí okamžité opětovné čtení.
+        """
+        stamp = self.optional_data_updated.get((zone_id, key))
+        if zone_id in cache and stamp is not None and now - stamp < timedelta(minutes=15):
+            return
+        try:
+            async with asyncio.timeout(10):
+                value = await fetch(zone_id)
+            if not isinstance(value, expected):
+                raise ValueError("Unexpected optional response type")
+            cache[zone_id] = value
+        except ClientResponseError as err:
+            if err.status == 401:
+                raise ConfigEntryAuthFailed from err
+            cache[zone_id] = None
+            _LOGGER.debug("Optional %s endpoint unavailable (HTTP %s)", key, err.status)
+        except (ClientError, TimeoutError, ValueError, TypeError):
+            cache[zone_id] = None
+            _LOGGER.debug("Optional %s data unavailable", key)
+        finally:
+            self.optional_data_updated[(zone_id, key)] = now
+
     def _process_consumption_data(self, appliance: dict, consumption: dict) -> dict:
-        """Prepare the consumption data of an appliance and its producers."""
-        # Start from the defaults so a missing appliance total is 0.0 instead of unknown
+        """Zachovat měřené nuly a ponechat chybějící energie jako None.
+
+        Energie z API jsou kWh; plynové senzory CH a DHW mají m³. Převod
+        vyžaduje kladnou konečnou výhřevnost v kWh/m³ ze stejného spotřebiče.
+        Bez ní objem neodhadujeme. Sezónní účinnost zůstává hodnotou API.
+        """
         consumption = {**APPLIANCE_CONSUMPTION_DEFAULT_DATA, **consumption}
-
+        for key in APPLIANCE_CONSUMPTION_DEFAULT_DATA:
+            value = consumption.get(key)
+            if type(value) not in (int, float) or not isfinite(value):
+                consumption[key] = None
         for producer in get_producers(consumption):
-            # The API reports null for energy a producer doesn't use or deliver, e.g.
-            # hot water for a heat pump when the boiler heats the water
-            for producer_stat in PRODUCER_STATS:
-                if not isinstance(producer.get(producer_stat), int | float):
-                    producer[producer_stat] = 0.0
-
+            for key in PRODUCER_STATS:
+                value = producer.get(key)
+                if type(value) not in (int, float) or not isfinite(value):
+                    producer[key] = None
             if producer.get("energyType") == "NaturalGas":
-                # Recalculate energy values back to gas values when Gas device
-                calorific_value = float(appliance["gasCalorificValue"])
+                try:
+                    calorific = float(appliance.get("gasCalorificValue"))
+                except (TypeError, ValueError):
+                    calorific = 0
                 for key in ("energyConsumptionCH", "energyConsumptionDHW"):
-                    producer[key] = round(producer[key] / calorific_value, 2)
-
+                    value = producer[key]
+                    producer[key] = (
+                        round(value / calorific, 3)
+                        if value is not None and isfinite(calorific) and calorific > 0
+                        else None
+                    )
         return consumption
 
     def get_by_id(self, item_id: str):

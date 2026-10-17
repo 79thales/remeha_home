@@ -1,13 +1,15 @@
 """Platform for DHW control."""
 
 from __future__ import annotations
+
 import logging
 from typing import Any
 
+import homeassistant.util.dt as dt_util
 from homeassistant.components.water_heater import (
     STATE_ECO,
-    STATE_HIGH_DEMAND,
     STATE_HEAT_PUMP,
+    STATE_HIGH_DEMAND,
     STATE_PERFORMANCE,
     WaterHeaterEntity,
     WaterHeaterEntityFeature,
@@ -19,12 +21,16 @@ from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-import homeassistant.util.dt as dt_util
 
 from .api import RemehaHomeAPI
 from .const import DOMAIN
 from .coordinator import RemehaHomeUpdateCoordinator
-from .util import detect_dhw_setpoint_activity, supports_reduced_setpoint
+from .util import (
+    detect_dhw_setpoint_activity,
+    serialized_command,
+    supports_reduced_setpoint,
+    validate_value,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -68,8 +74,7 @@ class RemehaHomeWaterHeater(CoordinatorEntity, WaterHeaterEntity):
     """Water heater entity representing a DHW zone."""
 
     _attr_supported_features = (
-        WaterHeaterEntityFeature.TARGET_TEMPERATURE
-        | WaterHeaterEntityFeature.OPERATION_MODE
+        WaterHeaterEntityFeature.TARGET_TEMPERATURE | WaterHeaterEntityFeature.OPERATION_MODE
     )
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_translation_key = "remeha_home_dhw"
@@ -151,7 +156,7 @@ class RemehaHomeWaterHeater(CoordinatorEntity, WaterHeaterEntity):
             return ranges.get("comfortSetpointMax", self._data.get("setPointMax"))
         return ranges.get("reducedSetpointMax", self._data.get("setPointMax"))
 
-    def _current_setpoint_type(self) -> str:
+    def _current_setpoint_type(self) -> str | None:
         """Return the active setpoint type based on the current mode."""
         mode = self._data.get("dhwZoneMode")
         if mode in ("ContinuousComfort", "Boost"):
@@ -164,8 +169,8 @@ class RemehaHomeWaterHeater(CoordinatorEntity, WaterHeaterEntity):
                 return "comfort"
             if activity == "Eco":
                 return "eco"
-            return "eco"
-        return "eco"
+            return None
+        return None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -207,39 +212,42 @@ class RemehaHomeWaterHeater(CoordinatorEntity, WaterHeaterEntity):
             return "low_temperature"
         return None
 
+    @serialized_command("hot_water_zone_id")
     async def async_set_temperature(self, **kwargs: Any) -> None:
-        """Set new target temperature for the active setpoint."""
-        if (temperature := kwargs.get(ATTR_TEMPERATURE)) is None:
+        """Nastavit potvrzenou aktivní teplotu TUV v °C.
+
+        V programu, kde nelze z dat určit aktivní Comfort/Eco, zápis odmítneme;
+        uživatel může použít výslovný číselný ovladač. Lokální stav se změní
+        až po úspěchu API, proto síťová chyba nevytvoří zdánlivé potvrzení.
+        """
+        temperature = kwargs.get(ATTR_TEMPERATURE)
+        if temperature is None:
             return
-
-        setpoint_type = self._current_setpoint_type()
-        if setpoint_type == "comfort":
-            # Optimistic local update to avoid transient UI mismatches
-            self._data["comfortSetPoint"] = temperature
-            self._data["targetSetpoint"] = temperature
-            await self.api.async_set_dhw_comfort_setpoint(
-                self.hot_water_zone_id, temperature
+        kind = self._current_setpoint_type()
+        if not self.available or kind is None:
+            raise ServiceValidationError("Active hot water setpoint is unknown")
+        if kind == "eco" and not supports_reduced_setpoint(self._data):
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="eco_setpoint_requires_tank"
             )
-        else:
-            if not supports_reduced_setpoint(self._data):
-                raise ServiceValidationError(
-                    translation_domain=DOMAIN,
-                    translation_key="eco_setpoint_requires_tank",
-                )
-            self._data["reducedSetpoint"] = temperature
-            self._data["targetSetpoint"] = temperature
-            await self.api.async_set_dhw_reduced_setpoint(
-                self.hot_water_zone_id, temperature
-            )
-
+        validate_value(temperature, self.min_temp, self.max_temp)
+        setter = (
+            self.api.async_set_dhw_comfort_setpoint
+            if kind == "comfort"
+            else self.api.async_set_dhw_reduced_setpoint
+        )
+        await setter(self.hot_water_zone_id, temperature)
+        self._data["comfortSetPoint" if kind == "comfort" else "reducedSetpoint"] = temperature
+        self._data["targetSetpoint"] = temperature
         self.async_write_ha_state()
         await self.coordinator.async_request_refresh()
 
+    @serialized_command("hot_water_zone_id")
     async def async_set_operation_mode(self, operation_mode: str) -> None:
         """Set operation mode."""
         target_mode = OPERATION_TO_REMEHA_DHW_MODE.get(operation_mode)
-        if not target_mode:
-            return
+        if not self.available or not target_mode:
+            raise ServiceValidationError("Hot water mode is unavailable or unsupported")
 
         if target_mode == "ContinuousComfort":
             await self.api.async_set_dhw_mode_comfort(self.hot_water_zone_id)
@@ -248,6 +256,8 @@ class RemehaHomeWaterHeater(CoordinatorEntity, WaterHeaterEntity):
         elif target_mode == "Off":
             await self.api.async_set_dhw_mode_eco(self.hot_water_zone_id)
         elif target_mode == "Boost":
+            if self._data.get("capabilityBoostMode") is not True:
+                raise ServiceValidationError("Boost capability is not confirmed")
             if self._data.get("dhwZoneMode") != "Scheduling":
                 raise ServiceValidationError(
                     translation_domain=DOMAIN,
