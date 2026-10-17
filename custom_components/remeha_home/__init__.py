@@ -12,9 +12,11 @@ from .api import RemehaHomeAPI, RemehaHomeOAuth2Implementation
 from .config_flow import RemehaHomeLoginFlowHandler
 from .const import DOMAIN
 from .coordinator import RemehaHomeUpdateCoordinator
+from .upstream import RemehaUpstreamCoordinator
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
+    Platform.BUTTON,
     Platform.CLIMATE,
     Platform.NUMBER,
     Platform.SENSOR,
@@ -51,9 +53,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     hass.data[DOMAIN][entry.entry_id] = {
         "api": api,
         "coordinator": coordinator,
+        "upstream": RemehaUpstreamCoordinator(hass, entry),
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # GitHub je volitelná diagnostika. Start a 60s cyklus topení na něj nečekají;
+    # config entry při unload/restartu zruší případnou rozpracovanou kontrolu.
+    entry.async_create_background_task(
+        hass,
+        hass.data[DOMAIN][entry.entry_id]["upstream"].async_refresh(),
+        "remeha_home initial upstream check",
+    )
 
     return True
 

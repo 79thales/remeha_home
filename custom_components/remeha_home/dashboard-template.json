@@ -4,7 +4,8 @@
     "negative_power": "Záporné W se jen v přehledu nahradí nulou; neplatná či stará data nejsou nula.",
     "energy": "Odběrové čítače Shelly v kWh, stat_type change, kalendářní týden/měsíc/rok v časovém pásmu HA.",
     "side_effects": "Generátor nevytváří řídicí povely, nemění historii a zachová všechny ostatní pohledy.",
-    "bindings": "Symbolické názvy oddělují přenosnou šablonu od soukromé konfigurace domácnosti."
+    "bindings": "Symbolické názvy oddělují přenosnou šablonu od soukromé konfigurace domácnosti.",
+    "upstream": "Dva diagnostické počty commitů od skutečně převzatých SHA a ruční tlačítko kontroly; stav topení se nemění."
   },
   "views": [
     {
@@ -905,6 +906,35 @@
                   "name": "Remeha Home · vlastní fork"
                 }
               ],
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "entities",
+              "title": "Nové commity upstreamu",
+              "show_header_toggle": false,
+              "entities": [
+                {
+                  "entity": "@@UPSTREAM_ORIGINAL@@",
+                  "name": "Původní integrace"
+                },
+                {
+                  "entity": "@@UPSTREAM_COMMUNITY@@",
+                  "name": "Komunitní fork"
+                },
+                {
+                  "entity": "@@UPSTREAM_CHECK@@",
+                  "name": "Zkontrolovat upstream"
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "markdown",
+              "content": "{# Čtecí diagnostika: ukázat čas skutečné kontroly a pevné GitHub odkazy.\nPočet se nevypočítává z neznámých dat. Chyba/limit API není nula změn. #}\n{% for e,label in [('@@UPSTREAM_ORIGINAL@@','Původní integrace'),('@@UPSTREAM_COMMUNITY@@','Komunitní fork')] %}\n**{{ label }}** · {% if is_number(states(e)) %}{{ states(e) }} nových commitů{% else %}kontrola nedostupná ({{ state_attr(e,'error') or 'čeká na načtení' }}){% endif %}\n{% set stamp=state_attr(e,'checked_at') %}\n{% if stamp %}Ověřeno: {{ as_timestamp(stamp) | timestamp_custom('%d.%m.%Y %H:%M', true) }}{% endif %}\n{% if state_attr(e,'compare_url') %}[Porovnání na GitHubu]({{ state_attr(e,'compare_url') }}){% endif %}\n\n{% endfor %}\nKontrola po 12 hodinách a ručním tlačítkem (nejdříve po 5 minutách; limit GitHubu může čekání prodloužit). Počítají se commity od převzatého základu našeho vydání. Změny posuzujeme před převzetím.",
               "grid_options": {
                 "columns": "full"
               }

@@ -118,3 +118,37 @@ navigaci, dostupnost vazeb a zachování ostatních pohledů. Zdrojové YAML má
 komentáře; Lovelace storage ukládá JSON a YAML komentáře nepřenáší. Jinja komentář
 výpočtu zůstává přímo v uloženém obsahu karty. Toto rozšíření zavádí pouze statické
 soubory a nemění běhové řízení integrace.
+
+## Kontrola nových upstream commitů
+
+Od v0.3.0 obsahuje integrace dvě diagnostická čidla **Nové commity · původní
+integrace** / **Nové commity · komunitní fork** a tlačítko **Zkontrolovat upstream**.
+Jsou u prvního zařízení každé konfigurační položky a generovaný dashboard je
+zobrazuje v **Detaily → Řízení a údržba**. HACS dál spravuje vydání našeho forku;
+tato čidla upozorňují na zdrojové commity, které ještě čekají na posouzení.
+
+Zdroje jsou pevně dané: `msvisser/remeha_home` a `hugo-leij/remeha_home`, větev
+`main`. Počet se určuje od referenčních SHA v `upstream.py`, které označují
+skutečně převzatou historii. Kontrola neposouvá referenci. Při převzetí dalších
+upstream změn musí správce zároveň upravit příslušnou referenci, testy a vydání.
+Novější vlastní commity našeho forku se do tohoto počtu nezapočítávají.
+
+První čtení běží po načtení integrace na pozadí, další automaticky každých 12 h.
+Ruční tlačítko používá stejnou 5minutovou cache a respektuje odklad při limitu API.
+Každý zdroj má 15s timeout pro dva anonymní GET: načtení SHA větve a porovnání
+převzatého základu s tímto přesným SHA. Odesílají se pouze veřejné názvy repozitářů,
+větev a SHA; nepoužívá se token Remeha, HACS ani údaje domácnosti. Zámek omezuje
+souběh kontrol a oba zdroje se čtou souběžně, odděleně od 60s cyklu Remeha.
+
+Nula znamená úspěšné potvrzení, že nepřibyly commity. Síťová/HTTP chyba, neplatná
+odpověď, přepsaná nebo vrácená historie znepřístupní jen příslušné čidlo. Atributy
+`error`, `checked_at`, `last_success_at`, `last_success_commits` a případně `retry_at`
+odlišují chybu od posledního známého stavu. Hodnota posledního úspěchu není při
+chybě vydávána za aktuální počet. `compare_url` a `latest_commit_url` umožní ruční
+revizi na GitHubu. Počet je počet commitů, nikoli záruka použitelné opravy.
+
+Kontrola nevytváří merge, instalaci ani řídicí povel a nepotřebuje automatizaci.
+GitHub neblokuje načtení termostatu a jeho výpadek nevyvolává přihlášení do Remeha.
+Při unload/restartu se odpojí plánování a rozpracovanou kontrolu spravuje config
+entry. Po restartu se stav znovu ověřuje; cache ani předpokládané nuly se neobnovují.
+Načtení nového Python kódu tohoto vydání vyžaduje restart HA.

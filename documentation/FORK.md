@@ -91,3 +91,13 @@ musí odpovídat tagu. Vydání neprovádí instalaci do HA ani restart instance
 Validace HACS je pro vlastní repozitář. Výslovně vynechává katalogové kontrolu
 license: převzatý upstream neobsahuje LICENSE a fork mu novou licenci
 nepřiděluje. Manifest, hacs.json, metadata a ostatní kontroly se ověřují běžně.
+
+## Nezávislá kontrola upstreamů (v0.3.0)
+
+`upstream.py` spravuje čtecí koordinátor GitHubu se dvěma pevnými zdroji a SHA
+skutečně převzatých revizí. `button.py` pouze žádá obnovení; dvě nové třídy čidel
+v `sensor.py` poskytují počet a metadata. Zapojení v `__init__.py` spouští první
+kontrolu jako úlohu config entry na pozadí až po načtení platforem. Kód povelů,
+priorita řízení i časování Remeha se nemění. Podrobné intervaly, chyby, cache a
+postup posunu převzaté reference jsou popsány v README a přímo u implementace.
+Generátor i oba formáty šablony zobrazují čidla a ruční tlačítko jen v detailech.

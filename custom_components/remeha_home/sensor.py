@@ -11,6 +11,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -29,6 +30,7 @@ from .coordinator import (
     get_producer_id,
     get_producers,
 )
+from .upstream import SOURCES
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -57,6 +59,18 @@ async def async_setup_entry(
                     RemehaHomeSensor(coordinator, hot_water_zone_id, entity_description)
                 )
     async_add_entities(entities)
+
+    # Samostatná data GitHubu se nečtou přes cloudový koordinátor topení.
+    # Jen dvě diagnostické entity na config entry, připojené k prvnímu zařízení.
+    upstream = hass.data[DOMAIN][entry.entry_id].get("upstream")
+    if upstream is not None and coordinator.data["appliances"]:
+        parent = coordinator.data["appliances"][0]["applianceId"]
+        async_add_entities(
+            [
+                RemehaUpstreamSensor(upstream, entry, source, coordinator.get_device_info(parent))
+                for source in SOURCES
+            ]
+        )
 
     known_producer_ids: set[str] = set()
 
@@ -144,3 +158,40 @@ class RemehaHomeSensor(CoordinatorEntity, SensorEntity):
     def device_info(self) -> DeviceInfo:
         """Return device info for this device."""
         return self.coordinator.get_device_info(self.item_id)
+
+
+class RemehaUpstreamSensor(CoordinatorEntity, SensorEntity):
+    """Počet dosud nepřevzatých commitů; chybná kontrola se nezobrazí jako 0.
+
+    Jednotka commity není energie ani kumulativní měření. Atributy uchovávají
+    přesný základ, odkaz, čas kontroly a poslední úspěch pro rozlišení výpadku.
+    Stav každého zdroje je nezávislý na druhém zdroji a na dostupnosti Remeha.
+    """
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:source-commit"
+    _attr_native_unit_of_measurement = "commits"
+
+    def __init__(self, coordinator, entry, source, device_info):
+        super().__init__(coordinator)
+        self.source = source
+        self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_upstream_{source.key}"
+        self._attr_name = "Nové commity · " + (
+            "původní integrace" if source.key == "original" else "komunitní fork"
+        )
+        self._attr_device_info = device_info
+
+    @property
+    def available(self):
+        """Nula platí jen při úspěšném srovnání stejné historie."""
+        result = (self.coordinator.data or {}).get(self.source.key)
+        return super().available and result is not None and result.get("error") is None
+
+    @property
+    def native_value(self):
+        return (self.coordinator.data or {}).get(self.source.key, {}).get("commits")
+
+    @property
+    def extra_state_attributes(self):
+        return (self.coordinator.data or {}).get(self.source.key, {})

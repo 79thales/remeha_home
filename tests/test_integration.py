@@ -241,6 +241,11 @@ async def test_full_platform_setup_has_no_writes_or_via_warning(
     entry.add_to_hass(hass)
     with (
         patch("custom_components.remeha_home.RemehaHomeAPI", return_value=api),
+        # I při nedostupném GitHubu musí být hlavní integrace plně načtená.
+        patch(
+            "custom_components.remeha_home.upstream.RemehaUpstreamCoordinator._get_json",
+            new=AsyncMock(side_effect=ClientConnectionError()),
+        ),
         patch(
             "custom_components.remeha_home.config_entry_oauth2_flow.async_get_config_entry_implementation",
             new=AsyncMock(),
@@ -248,7 +253,7 @@ async def test_full_platform_setup_has_no_writes_or_via_warning(
         patch("custom_components.remeha_home.config_entry_oauth2_flow.OAuth2Session"),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
-        await hass.async_block_till_done()
+        await hass.async_block_till_done(wait_background_tasks=True)
     registry = er.async_get(hass)
     entities = [
         item for item in registry.entities.values() if item.config_entry_id == entry.entry_id
@@ -260,7 +265,17 @@ async def test_full_platform_setup_has_no_writes_or_via_warning(
         "switch",
         "water_heater",
         "binary_sensor",
+        "button",
     }
+    assert (
+        hass.data["remeha_home"][entry.entry_id]["upstream"].data["original"]["error"]
+        == "network_error"
+    )
+    assert any(
+        hass.states.get(item.entity_id).state not in ("unknown", "unavailable")
+        for item in entities
+        if item.domain == "climate"
+    )
     for call in api.mock_calls:
         assert not call[0].startswith("async_set_")
     assert not any(

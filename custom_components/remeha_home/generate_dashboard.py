@@ -7,7 +7,9 @@ služby ani zápisy do HA. Při chybějící vazbě či neplatné šabloně skon
 
 Hlavní pohled ukazuje ruční ovládání Remeha, W a kalendářní kWh z čítačů odběru.
 Záporné W se jen zobrazí jako nula, chybějící/starší než 180 s jako nedostupné.
-Detail ukazuje původní Shelly hodnoty, diagnostiku a cloudovou energii. YAML je
+Detail ukazuje původní Shelly hodnoty, diagnostiku, cloudovou energii a kontrolu
+upstream commitů. Vazby UPSTREAM_ORIGINAL/COMMUNITY/CHECK patří dvěma senzorům
+a tlačítku kontroly; jejich nedostupnost nesmí být zaměněna za nulový počet změn. YAML je
 komentovaná kopie JSON šablony; konfigurace storage v HA používá JSON.
 """
 
