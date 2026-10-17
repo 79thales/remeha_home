@@ -29,7 +29,7 @@ class Response:
 
 
 @pytest.fixture
-def github(hass, ready):
+async def github(hass, ready):
     """Oba upstreamy jsou na známém převzatém základu; HTTP kontrolujeme přes URL."""
     _, entry = ready
     coordinator = RemehaUpstreamCoordinator(hass, entry)
@@ -78,7 +78,14 @@ async def test_new_commits_compare_exact_head(github, ready):
 
 @pytest.mark.parametrize(
     "status,count",
-    [("diverged", 4), ("behind", 0), ("ahead", True), ("ahead", -1), ("identical", 2)],
+    [
+        ("diverged", 4),
+        ("behind", 0),
+        ("ahead", True),
+        ("ahead", -1),
+        ("ahead", 0),
+        ("identical", 2),
+    ],
 )
 async def test_history_or_invalid_count_is_not_zero(github, ready, status, count):
     """Přepsaná historie, bool a neplatný počet nejsou potvrzeným stavem bez změn."""

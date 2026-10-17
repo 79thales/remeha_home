@@ -157,6 +157,9 @@ class RemehaUpstreamCoordinator(DataUpdateCoordinator):
                 if (
                     type(count) is not int
                     or count < 0
+                    or comparison["status"] == "ahead"
+                    and count == 0
+                    or (comparison["status"] == "identical") != (sha == source.baseline)
                     or comparison["status"] == "identical"
                     and count != 0
                 ):
