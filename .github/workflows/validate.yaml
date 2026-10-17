@@ -36,4 +36,4 @@ jobs:
             # Vlastní HACS repozitář nepřidáváme do výchozího katalogu.
             # Původní upstream neobsahuje LICENSE; cizímu kódu licenci nevymýšlíme.
             # Vynechané kontroly jsou zde uvedeny výslovně, ostatní musí projít.
-            ignore: "brands,license"
+            ignore: "license"
