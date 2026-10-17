@@ -87,3 +87,7 @@ křivku, aktivity, souběh, diagnostiku a načtení všech šesti platforem bez 
 Workflow zvlášť kontroluje HACS/hassfest, styl a testy. Release ZIP obsahuje
 jen Python a JSON integrace, nikoli testy nebo podklady domácnosti. Manifest
 musí odpovídat tagu. Vydání neprovádí instalaci do HA ani restart instance.
+
+Validace HACS je pro vlastní repozitář. Výslovně vynechává katalogové kontroly
+brands a license: převzatý upstream neobsahuje LICENSE a fork mu novou licenci
+nepřiděluje. Manifest, hacs.json, metadata a ostatní kontroly se ověřují běžně.

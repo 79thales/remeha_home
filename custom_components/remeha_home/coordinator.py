@@ -93,7 +93,6 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
         # during the day apart from the start of a new day
         self.appliance_consumption_data_date: dict[str, date] = {}
         self.appliance_producer_ids: dict[str, set[str]] = {}
-        self.dhw_activity_cache = {}
         self.heating_curve_data: dict[str, dict] = {}
         self.activities_data: dict[str, list] = {}
 
@@ -382,25 +381,20 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
         return self.activities_data.get(climate_zone_id)
 
     def _derive_dhw_activity(self, zone: dict) -> str | None:
-        """Derive a human-friendly DHW activity label."""
+        """Určit aktivní Comfort/Eco pouze ze současných údajů v °C.
+
+        Při neurčitém cíli nepřebíráme starou aktivitu z minulého programu;
+        výsledek None zablokuje obecný zápis teploty, dokud není cíl známý.
+        """
         mode = zone.get("dhwZoneMode")
         if mode in ("ContinuousComfort", "Boost"):
-            activity = "Comfort"
-            self.dhw_activity_cache[zone.get("hotWaterZoneId")] = activity
-            return activity
+            return "Comfort"
         if mode == "Scheduling":
-            activity = detect_dhw_setpoint_activity(
+            return detect_dhw_setpoint_activity(
                 zone.get("targetSetpoint"),
                 zone.get("comfortSetPoint"),
                 zone.get("reducedSetpoint"),
             )
-            if activity is not None:
-                self.dhw_activity_cache[zone.get("hotWaterZoneId")] = activity
-                return activity
-            return self.dhw_activity_cache.get(zone.get("hotWaterZoneId"))
         if mode == "Off":
-            # Called Eco in the Remeha Home app, the reduced setpoint applies
-            activity = "Eco"
-            self.dhw_activity_cache[zone.get("hotWaterZoneId")] = activity
-            return activity
+            return "Eco"
         return None

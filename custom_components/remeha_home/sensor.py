@@ -73,14 +73,15 @@ async def async_setup_entry(
                 producer_id = get_producer_id(appliance["applianceId"], producer)
                 if producer_id in known_producer_ids:
                     continue
-                known_producer_ids.add(producer_id)
-
                 if producer.get("energyType") == "NaturalGas":
                     entity_descriptions = GAS_PRODUCER_SENSOR_TYPES
                 elif producer.get("energyType") == "Electric":
                     entity_descriptions = ELECTRIC_PRODUCER_SENSOR_TYPES
                 else:
                     continue
+                # Neznámý typ si neoznačíme za hotový: při pozdějším potvrzení
+                # jednotek se senzory mohou doplnit bez restartu integrace.
+                known_producer_ids.add(producer_id)
                 new_entities.extend(
                     RemehaHomeSensor(coordinator, producer_id, entity_description)
                     for entity_description in entity_descriptions

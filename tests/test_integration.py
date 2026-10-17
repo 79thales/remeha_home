@@ -2,6 +2,7 @@
 
 import asyncio
 from copy import deepcopy
+from datetime import timedelta
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -266,3 +267,53 @@ async def test_full_platform_setup_has_no_writes_or_via_warning(
         "deprecated" in rec.message and "via_device" in rec.message for rec in caplog.records
     )
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+def test_schedule_does_not_reuse_previous_activity(ready):
+    """Neurčitý současný cíl nesmí zdědit dřívější Comfort/Eco."""
+    c, _ = ready
+    zone = c.items["water-1"]
+    assert c._derive_dhw_activity(zone) == "Comfort"
+    zone["targetSetpoint"] = 50
+    assert c._derive_dhw_activity(zone) is None
+
+
+async def test_late_optional_data_adds_controls_without_duplicates(hass, ready):
+    """Po obnově volitelného API přidat nové ovladače a zachovat jediná ID."""
+    from types import SimpleNamespace
+
+    from custom_components.remeha_home.number import async_setup_entry as setup_numbers
+
+    c, entry = ready
+    curve = dict(c.heating_curve_data["zone-1"])
+    c.heating_curve_data["zone-1"] = None
+    hass.data.setdefault("remeha_home", {})[entry.entry_id] = {"coordinator": c, "api": c.api}
+    lifecycle = SimpleNamespace(entry_id=entry.entry_id, async_on_unload=Mock())
+    added = []
+    await setup_numbers(hass, lifecycle, added.extend)
+    assert not any("heating_curve" in item.unique_id for item in added)
+    c.heating_curve_data["zone-1"] = curve
+    c.async_set_updated_data(c.data)
+    assert len([item for item in added if "heating_curve" in item.unique_id]) == 2
+    before = len(added)
+    c.async_set_updated_data(c.data)
+    assert len(added) == before
+    lifecycle.async_on_unload.call_args.args[0]()
+
+
+def test_sensor_timestamp_keeps_original_offset(ready):
+    """API offset +02:00 se převede na UTC bez posunutí okamžiku."""
+    from homeassistant.components.sensor import SensorDeviceClass, SensorEntityDescription
+
+    from custom_components.remeha_home.sensor import RemehaHomeSensor
+
+    c, _ = ready
+    sensor = RemehaHomeSensor(
+        c,
+        "zone-1",
+        SensorEntityDescription(key="nextSwitchTime", device_class=SensorDeviceClass.TIMESTAMP),
+    )
+    assert sensor.native_value.hour == 6
+    assert sensor.native_value.utcoffset() == timedelta(0)
+    c.items["zone-1"]["nextSwitchTime"] = "0001-01-01T00:00:00Z"
+    assert sensor.native_value is None
