@@ -71,3 +71,50 @@ Funkční rozšíření a jejich autorská historie byla převzata z
 `20bf0ffa82055c1b341ae538529af4473fbbb5bf`. Poděkování patří také autorům původních
 komunitních příspěvků, jejichž commity jsou zachovány v historii.
 Vlastní opravy kompatibility, validace, diagnostika, testy a vydání spravuje tento fork.
+
+## Generovat dashboard Vytápění 66 new
+
+Přibalená funkce `generate_dashboard()` v `custom_components/remeha_home/generate_dashboard.py`
+a šablony `dashboard-template.json` / `dashboard-template.yaml` vytvářejí dva pohledy
+společně: hlavní přehled `vytapeni-66-new` a podhled `vytapeni-66-new-detaily`.
+Tlačítko **Detaily** schová surová měření a diagnostiku Shelly, cloudové energie,
+diagnostiku TRV a stav existujících automatizací. Hlavní pohled obsahuje nové
+ovládání TUV, boost, topnou křivku, aktivity, termostaty a přehled spotřeby.
+
+Generátor je samostatný offline nástroj standardního Pythonu. Nenačítá integraci,
+nevolá služby HA a neřídí topení. Konkrétní entity se předávají soukromým JSON
+slovníkem vazeb; všechny názvy mezi `@@...@@` v šabloně musí být navázány na
+existující `entity_id`. `DASHBOARD_BASE` je relativní adresa, například `/lovelace`.
+Vazby je nutné zkontrolovat pro danou domácnost; přibalené rozložení předpokládá
+také měřidla Shelly a doplňkové topné zóny. Ovladače zapisují až při použití.
+
+```sh
+python custom_components/remeha_home/generate_dashboard.py --input dashboard-before.json --bindings bindings-private.json --output dashboard-proposed.json
+```
+
+Vstup je úplná exportovaná konfigurace Lovelace (případně obálka konektoru s
+`config`), výstup je úplná nová konfigurace JSON. Vstup se nemění. Generátor
+zachová obsah a pořadí ostatních pohledů; oba vlastní pohledy aktualizuje bez
+duplicit. Při prvním vytvoření je vloží za původní pohled `tepelne-cerpadlo`,
+případně na konec. Neúplné vazby a duplicitní vlastní cesty odmítne. Před zápisem
+přes API je třeba záloha, kontrola aktuální konfigurace a ověření výsledku.
+
+Okamžitý příkon je součet nezáporných činných výkonů TČ a elektrokotle ve W.
+Záporné hodnoty se pouze v přehledu zobrazují jako 0 W; hodnoty se neobracejí
+absolutní hodnotou. Chybějící, nečíselná nebo déle než 180 s nehlášená data jsou
+nedostupná, nikoli nula. Stáří se posuzuje podle `last_reported`, aby stálá hodnota
+nebyla zaměněna za výpadek. Markdown se aktualizuje při změně měření a díky
+`now()` nejméně každou minutu. Zdrojová historie a měřidla se nemění.
+
+Týdenní, měsíční a roční kWh ukazují změnu samostatných odběrových čítačů TČ a
+elektrokotle od začátku probíhajícího kalendářního období v časovém pásmu HA.
+Nejde o klouzavých 7/30/365 dní. Karty používají existující statistiky recorderu;
+nevytvářejí pomocné měřiče a nezahrnují čítače opačného směru. Chybějící historii
+nedopočítávají. Remeha denní energie jsou zvlášť v detailech, protože cloud může
+mít zpoždění a nehlásí vždy všechny veličiny.
+
+Při změně rozložení upravte funkci i obě šablony společně a ověřte shodu JSON/YAML,
+navigaci, dostupnost vazeb a zachování ostatních pohledů. Zdrojové YAML má české
+komentáře; Lovelace storage ukládá JSON a YAML komentáře nepřenáší. Jinja komentář
+výpočtu zůstává přímo v uloženém obsahu karty. Toto rozšíření zavádí pouze statické
+soubory a nemění běhové řízení integrace.

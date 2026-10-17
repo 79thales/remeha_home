@@ -25,7 +25,7 @@ def main():
         for file in sorted(source.rglob("*")):
             if (
                 file.is_file()
-                and file.suffix in {".py", ".json"}
+                and file.suffix in {".py", ".json", ".yaml"}
                 and "__pycache__" not in file.parts
             ):
                 archive.write(file, file.relative_to(source))

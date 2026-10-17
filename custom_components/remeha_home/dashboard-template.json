@@ -1,0 +1,924 @@
+{
+  "_documentation": {
+    "purpose": "Vytápění 66 new: ovládání Remeha, aktuální příkon a kalendářní energie; Shelly pod Detaily.",
+    "negative_power": "Záporné W se jen v přehledu nahradí nulou; neplatná či stará data nejsou nula.",
+    "energy": "Odběrové čítače Shelly v kWh, stat_type change, kalendářní týden/měsíc/rok v časovém pásmu HA.",
+    "side_effects": "Generátor nevytváří řídicí povely, nemění historii a zachová všechny ostatní pohledy.",
+    "bindings": "Symbolické názvy oddělují přenosnou šablonu od soukromé konfigurace domácnosti."
+  },
+  "views": [
+    {
+      "title": "Vytápění 66 new",
+      "path": "vytapeni-66-new",
+      "icon": "mdi:heat-pump",
+      "type": "sections",
+      "max_columns": 3,
+      "show_icon_and_title": true,
+      "sections": [
+        {
+          "type": "grid",
+          "cards": [
+            {
+              "type": "heading",
+              "heading": "Vytápění 66",
+              "heading_style": "title",
+              "icon": "mdi:heat-pump",
+              "grid_options": {
+                "columns": "full"
+              },
+              "badges": [
+                {
+                  "type": "button",
+                  "text": "Detaily",
+                  "icon": "mdi:chart-line",
+                  "tap_action": {
+                    "action": "navigate",
+                    "navigation_path": "@@DASHBOARD_BASE@@/vytapeni-66-new-detaily"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "thermostat",
+              "entity": "@@CLIMATE@@",
+              "name": "Remeha · obytná zóna",
+              "features": [
+                {
+                  "type": "climate-hvac-modes",
+                  "hvac_modes": [
+                    "off",
+                    "heat",
+                    "auto"
+                  ]
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "entities",
+              "title": "Aktuální stav a časový program",
+              "show_header_toggle": false,
+              "entities": [
+                {
+                  "entity": "@@CLIMATE_STATUS@@",
+                  "name": "Stav topné zóny"
+                },
+                {
+                  "entity": "@@THERMAL@@",
+                  "name": "Provoz čerpadla"
+                },
+                {
+                  "entity": "@@SCHEDULE_TEMP@@",
+                  "name": "Teplota podle plánu"
+                },
+                {
+                  "entity": "@@NEXT_TEMP@@",
+                  "name": "Následující teplota"
+                },
+                {
+                  "entity": "@@NEXT_TIME@@",
+                  "name": "Následující změna plánu"
+                },
+                {
+                  "entity": "@@FIREPLACE@@",
+                  "name": "Režim krbu"
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "cards": [
+            {
+              "type": "heading",
+              "heading": "Teplá voda",
+              "heading_style": "title",
+              "icon": "mdi:water-boiler",
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "tile",
+              "entity": "@@DHW@@",
+              "name": "Program TUV",
+              "icon": "mdi:water-boiler",
+              "features": [
+                {
+                  "type": "water-heater-operation-modes",
+                  "operation_modes": [
+                    "heat_pump",
+                    "performance",
+                    "eco"
+                  ]
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "tile",
+              "entity": "@@DHW_TEMP@@",
+              "name": "Teplota vody",
+              "grid_options": {
+                "columns": 6
+              }
+            },
+            {
+              "type": "tile",
+              "entity": "@@DHW_MODE@@",
+              "name": "Aktivita TUV",
+              "grid_options": {
+                "columns": 6
+              }
+            },
+            {
+              "type": "entities",
+              "title": "Cílové teploty TUV",
+              "show_header_toggle": false,
+              "entities": [
+                {
+                  "entity": "@@COMFORT@@",
+                  "name": "Comfort"
+                },
+                {
+                  "entity": "@@ECO@@",
+                  "name": "Eco"
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "tile",
+              "entity": "@@BOOST@@",
+              "name": "Boost · rychlý ohřev",
+              "icon": "mdi:water-boiler-auto",
+              "tap_action": {
+                "action": "toggle"
+              },
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "entities",
+              "title": "Plán a stav",
+              "show_header_toggle": false,
+              "entities": [
+                {
+                  "entity": "@@DHW_STATUS@@",
+                  "name": "Stav ohřevu"
+                },
+                {
+                  "entity": "@@DHW_NEXT@@",
+                  "name": "Následující změna TUV"
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "markdown",
+              "content": "Boost se spouští z programu a jeho vypnutí vrací TUV do programu. Časy a cíle potvrzuje Remeha.",
+              "grid_options": {
+                "columns": "full"
+              }
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "cards": [
+            {
+              "type": "heading",
+              "heading": "Spotřeba elektřiny",
+              "heading_style": "title",
+              "icon": "mdi:lightning-bolt",
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "markdown",
+              "content": "{# Pouze zobrazení: platná měření W, stáří nejvýše 180 s. Záporné W se dle\nzadání zanedbávají. Neznámý či starý údaj není nula. Žádné služby ani spínání. #}\n{% set a='@@POWER_TC@@' %}{% set b='@@POWER_BOILER@@' %}\n{% set av=states(a) %}{% set bv=states(b) %}\n{% set af=is_number(av) and (as_timestamp(now())-as_timestamp(states[a].last_reported,0))<=180 %}\n{% set bf=is_number(bv) and (as_timestamp(now())-as_timestamp(states[b].last_reported,0))<=180 %}\n{% set ap=([av|float,0]|max) if af else none %}\n{% set bp=([bv|float,0]|max) if bf else none %}\n## {{ ((ap+bp)|round(0)|int) ~ ' W' if ap is not none and bp is not none else '—' }}\n**Aktuální příkon · TČ + elektrokotel**\n\nTČ: **{{ (ap|round(0)|int ~ ' W') if ap is not none else 'nedostupné' }}** · Elektrokotel: **{{ (bp|round(0)|int ~ ' W') if bp is not none else 'nedostupný' }}**\n\n_Záporný příkon = 0 W. Týden, měsíc a rok níže jsou probíhající kalendářní období z odběrových čítačů v kWh._",
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "statistic",
+              "entity": "@@ENERGY_TC@@",
+              "name": "TČ · týden",
+              "stat_type": "change",
+              "period": {
+                "calendar": {
+                  "period": "week"
+                }
+              },
+              "icon": "mdi:lightning-bolt",
+              "unit": "kWh",
+              "grid_options": {
+                "columns": 6
+              }
+            },
+            {
+              "type": "statistic",
+              "entity": "@@ENERGY_BOILER@@",
+              "name": "Elektrokotel · týden",
+              "stat_type": "change",
+              "period": {
+                "calendar": {
+                  "period": "week"
+                }
+              },
+              "icon": "mdi:lightning-bolt",
+              "unit": "kWh",
+              "grid_options": {
+                "columns": 6
+              }
+            },
+            {
+              "type": "statistic",
+              "entity": "@@ENERGY_TC@@",
+              "name": "TČ · měsíc",
+              "stat_type": "change",
+              "period": {
+                "calendar": {
+                  "period": "month"
+                }
+              },
+              "icon": "mdi:lightning-bolt",
+              "unit": "kWh",
+              "grid_options": {
+                "columns": 6
+              }
+            },
+            {
+              "type": "statistic",
+              "entity": "@@ENERGY_BOILER@@",
+              "name": "Elektrokotel · měsíc",
+              "stat_type": "change",
+              "period": {
+                "calendar": {
+                  "period": "month"
+                }
+              },
+              "icon": "mdi:lightning-bolt",
+              "unit": "kWh",
+              "grid_options": {
+                "columns": 6
+              }
+            },
+            {
+              "type": "statistic",
+              "entity": "@@ENERGY_TC@@",
+              "name": "TČ · rok",
+              "stat_type": "change",
+              "period": {
+                "calendar": {
+                  "period": "year"
+                }
+              },
+              "icon": "mdi:lightning-bolt",
+              "unit": "kWh",
+              "grid_options": {
+                "columns": 6
+              }
+            },
+            {
+              "type": "statistic",
+              "entity": "@@ENERGY_BOILER@@",
+              "name": "Elektrokotel · rok",
+              "stat_type": "change",
+              "period": {
+                "calendar": {
+                  "period": "year"
+                }
+              },
+              "icon": "mdi:lightning-bolt",
+              "unit": "kWh",
+              "grid_options": {
+                "columns": 6
+              }
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "cards": [
+            {
+              "type": "heading",
+              "heading": "Topná křivka a aktivity",
+              "heading_style": "title",
+              "icon": "mdi:chart-bell-curve-cumulative",
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "entities",
+              "title": "Topná křivka",
+              "show_header_toggle": false,
+              "entities": [
+                {
+                  "entity": "@@SLOPE@@",
+                  "name": "Sklon křivky"
+                },
+                {
+                  "entity": "@@BASE@@",
+                  "name": "Základ křivky (°C)"
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "entities",
+              "title": "Teploty aktivit programu",
+              "show_header_toggle": false,
+              "entities": [
+                {
+                  "entity": "@@ACTIVITY_1@@",
+                  "name": "Domů"
+                },
+                {
+                  "entity": "@@ACTIVITY_2@@",
+                  "name": "Spánek"
+                },
+                {
+                  "entity": "@@ACTIVITY_3@@",
+                  "name": "Večer – VT"
+                },
+                {
+                  "entity": "@@ACTIVITY_4@@",
+                  "name": "Práce"
+                },
+                {
+                  "entity": "@@ACTIVITY_5@@",
+                  "name": "Komfort"
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "markdown",
+              "content": "Rozsahy ovladačů poskytuje zařízení. Změna upraví parametr Remeha; pouhé otevření dashboardu nic nenastavuje.",
+              "grid_options": {
+                "columns": "full"
+              }
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "cards": [
+            {
+              "type": "heading",
+              "heading": "Teploty a tlak",
+              "heading_style": "title",
+              "icon": "mdi:home-thermometer",
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "tile",
+              "entity": "@@ROOM@@",
+              "name": "Místnost · Remeha",
+              "grid_options": {
+                "columns": 6
+              }
+            },
+            {
+              "type": "tile",
+              "entity": "@@OUTDOOR@@",
+              "name": "Venku",
+              "grid_options": {
+                "columns": 6
+              }
+            },
+            {
+              "type": "tile",
+              "entity": "@@PRESSURE@@",
+              "name": "Tlak topné vody",
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "history-graph",
+              "title": "Teploty za 24 hodin",
+              "hours_to_show": 24,
+              "entities": [
+                {
+                  "entity": "@@ROOM@@",
+                  "name": "Místnost"
+                },
+                {
+                  "entity": "@@OUTDOOR@@",
+                  "name": "Venku"
+                },
+                {
+                  "entity": "@@DHW_TEMP@@",
+                  "name": "TUV"
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "cards": [
+            {
+              "type": "heading",
+              "heading": "Další vytápění v domě",
+              "heading_style": "title",
+              "icon": "mdi:home-floor-1",
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "thermostat",
+              "entity": "@@TRV@@",
+              "name": "Kuchyně 66 · hlavice TRV",
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "markdown",
+              "title": "Termostat koupelna 66",
+              "content": "{% set e = '@@BATHROOM@@' %}\n{% set mode = states(e) %}\n**Termostat:** {{ 'Vypnutý' if mode == 'off' else 'Zapnutý' if mode == 'heat_cool' else 'Nedostupný' }}  \n{% set t = state_attr(e, 'current_temperature') %}\n**Teplota místnosti (přepočet W4):** {{ (t | float / 2) | round(1) if is_number(t) else '—' }} °C  \n**Nastavený cíl:** {{ states('@@BATHROOM_TARGET@@') }} °C\n\nRozsah **5–35 °C**, krok **0,5 °C**. Cíl je propojen s Tuya; změna posuvníku nemění zapnutí/vypnutí termostatu.",
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "entities",
+              "title": "Cílová teplota",
+              "show_header_toggle": false,
+              "entities": [
+                {
+                  "entity": "@@BATHROOM_TARGET@@",
+                  "name": "Požadovaná teplota",
+                  "icon": "mdi:thermometer"
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "horizontal-stack",
+              "cards": [
+                {
+                  "type": "button",
+                  "name": "Zapnout termostat",
+                  "icon": "mdi:power",
+                  "tap_action": {
+                    "action": "perform-action",
+                    "perform_action": "climate.set_hvac_mode",
+                    "target": {
+                      "entity_id": "@@BATHROOM@@"
+                    },
+                    "data": {
+                      "hvac_mode": "heat_cool"
+                    },
+                    "confirmation": {
+                      "text": "Zapnout termostat koupelny 66 podle nastavené cílové teploty?"
+                    }
+                  }
+                },
+                {
+                  "type": "button",
+                  "name": "Vypnout termostat",
+                  "icon": "mdi:power-off",
+                  "tap_action": {
+                    "action": "perform-action",
+                    "perform_action": "climate.set_hvac_mode",
+                    "target": {
+                      "entity_id": "@@BATHROOM@@"
+                    },
+                    "data": {
+                      "hvac_mode": "off"
+                    },
+                    "confirmation": {
+                      "text": "Vypnout termostat koupelny 66?"
+                    }
+                  }
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "markdown",
+              "content": "**Podlahová sonda:** údaj 68 °C z aplikace není tímto přepočtem opraven ani potvrzen jako skutečná teplota podlahy. Integrace Tuya jej nevystavuje samostatně. Tato karta podle něj nic nespíná.",
+              "grid_options": {
+                "columns": "full"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Vytápění 66 new – detaily",
+      "path": "vytapeni-66-new-detaily",
+      "icon": "mdi:chart-line",
+      "type": "sections",
+      "max_columns": 3,
+      "subview": true,
+      "back_path": "@@DASHBOARD_BASE@@/vytapeni-66-new",
+      "sections": [
+        {
+          "type": "grid",
+          "cards": [
+            {
+              "type": "heading",
+              "heading": "Shelly · měření TČ",
+              "heading_style": "title",
+              "icon": "mdi:meter-electric",
+              "grid_options": {
+                "columns": "full"
+              },
+              "badges": [
+                {
+                  "type": "button",
+                  "text": "Zpět",
+                  "icon": "mdi:arrow-left",
+                  "tap_action": {
+                    "action": "navigate",
+                    "navigation_path": "@@DASHBOARD_BASE@@/vytapeni-66-new"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "entities",
+              "title": "Činný výkon · surové hodnoty W",
+              "show_header_toggle": false,
+              "entities": [
+                {
+                  "entity": "@@POWER_TC@@",
+                  "name": "TČ · součet"
+                },
+                {
+                  "entity": "@@POWER_HBOX@@",
+                  "name": "Hbox"
+                },
+                {
+                  "entity": "@@POWER_OUTDOOR@@",
+                  "name": "Venkovní jednotka"
+                },
+                {
+                  "entity": "@@POWER_BOILER@@",
+                  "name": "Elektrokotel"
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "entities",
+              "title": "Čítače energie · kWh",
+              "show_header_toggle": false,
+              "entities": [
+                {
+                  "entity": "@@ENERGY_TC@@",
+                  "name": "TČ · odběr"
+                },
+                {
+                  "entity": "@@ENERGY_TC_RETURN@@",
+                  "name": "TČ · opačný směr"
+                },
+                {
+                  "entity": "@@ENERGY_BOILER@@",
+                  "name": "Elektrokotel · odběr"
+                },
+                {
+                  "entity": "@@ENERGY_BOILER_RETURN@@",
+                  "name": "Elektrokotel · opačný směr"
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "history-graph",
+              "title": "Surový příkon · 24 hodin",
+              "hours_to_show": 24,
+              "entities": [
+                {
+                  "entity": "@@POWER_TC@@",
+                  "name": "TČ"
+                },
+                {
+                  "entity": "@@POWER_BOILER@@",
+                  "name": "Elektrokotel"
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "markdown",
+              "content": "V hlavním přehledu se záporné W zanedbávají a energie opačného směru se do spotřeby nezahrnuje. Zde jsou původní hodnoty Shelly včetně znaménka. Zdrojové čítače ani historie se nemění.",
+              "grid_options": {
+                "columns": "full"
+              }
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "cards": [
+            {
+              "type": "heading",
+              "heading": "Shelly · diagnostika",
+              "heading_style": "title",
+              "icon": "mdi:chip",
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "entities",
+              "title": "Zdánlivý výkon a účiník",
+              "show_header_toggle": false,
+              "entities": [
+                {
+                  "entity": "@@APPR_TC@@",
+                  "name": "Celkem (VA)"
+                },
+                {
+                  "entity": "@@APPR_HBOX@@",
+                  "name": "Hbox (VA)"
+                },
+                {
+                  "entity": "@@APPR_OUTDOOR@@",
+                  "name": "TČ ven (VA)"
+                },
+                {
+                  "entity": "@@FACTOR_HBOX@@",
+                  "name": "Hbox · účiník"
+                },
+                {
+                  "entity": "@@FACTOR_OUTDOOR@@",
+                  "name": "TČ ven · účiník"
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "entities",
+              "title": "Teplota měřidel",
+              "show_header_toggle": false,
+              "entities": [
+                {
+                  "entity": "@@METER_TC_TEMP@@",
+                  "name": "Shelly TČ"
+                },
+                {
+                  "entity": "@@METER_BOILER_TEMP@@",
+                  "name": "Shelly elektrokotel"
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "entities",
+              "title": "Kuchyně · detaily TRV",
+              "show_header_toggle": false,
+              "entities": [
+                {
+                  "entity": "@@TRV_VALVE@@",
+                  "name": "Otevření ventilu"
+                },
+                {
+                  "entity": "@@TRV_BATTERY@@",
+                  "name": "Baterie"
+                },
+                {
+                  "entity": "@@TRV_RSSI@@",
+                  "name": "Síla signálu"
+                },
+                {
+                  "entity": "@@TRV_CALIBRATION@@",
+                  "name": "Problém kalibrace"
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "entities",
+              "title": "Pokojová teplota Shelly",
+              "show_header_toggle": false,
+              "entities": [
+                {
+                  "entity": "@@SHELLY_ROOM@@",
+                  "name": "Obývací pokoj"
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "cards": [
+            {
+              "type": "heading",
+              "heading": "Remeha · zdroje energie",
+              "heading_style": "title",
+              "icon": "mdi:heat-pump-outline",
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "entities",
+              "title": "Tepelné čerpadlo · denní údaje API",
+              "show_header_toggle": false,
+              "entities": [
+                {
+                  "entity": "@@PUMP_HEAT_IN@@",
+                  "name": "Vytápění · spotřebovaná energie"
+                },
+                {
+                  "entity": "@@PUMP_WATER_IN@@",
+                  "name": "TUV · spotřebovaná energie"
+                },
+                {
+                  "entity": "@@PUMP_COOL_IN@@",
+                  "name": "Chlazení · spotřebovaná energie"
+                },
+                {
+                  "entity": "@@PUMP_HEAT_OUT@@",
+                  "name": "Vytápění · dodané teplo"
+                },
+                {
+                  "entity": "@@PUMP_WATER_OUT@@",
+                  "name": "TUV · dodané teplo"
+                },
+                {
+                  "entity": "@@PUMP_COOL_OUT@@",
+                  "name": "Chlazení · dodaná energie"
+                },
+                {
+                  "entity": "@@PUMP_EFFICIENCY@@",
+                  "name": "Sezónní účinnost · je-li dostupná"
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "entities",
+              "title": "Elektrická záloha · denní údaje API",
+              "show_header_toggle": false,
+              "entities": [
+                {
+                  "entity": "@@BACKUP_HEAT_IN@@",
+                  "name": "Vytápění · spotřebovaná energie"
+                },
+                {
+                  "entity": "@@BACKUP_WATER_IN@@",
+                  "name": "TUV · spotřebovaná energie"
+                },
+                {
+                  "entity": "@@BACKUP_COOL_IN@@",
+                  "name": "Chlazení · spotřebovaná energie"
+                },
+                {
+                  "entity": "@@BACKUP_HEAT_OUT@@",
+                  "name": "Vytápění · dodané teplo"
+                },
+                {
+                  "entity": "@@BACKUP_WATER_OUT@@",
+                  "name": "TUV · dodané teplo"
+                },
+                {
+                  "entity": "@@BACKUP_COOL_OUT@@",
+                  "name": "Chlazení · dodaná energie"
+                },
+                {
+                  "entity": "@@BACKUP_EFFICIENCY@@",
+                  "name": "Sezónní účinnost · je-li dostupná"
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "markdown",
+              "content": "Údaje Remeha jsou hlášené cloudem a mohou mít zpoždění. Neznámé hodnoty zůstávají neznámé. Nejde o živé měření příkonu; pro kalendářní spotřebu hlavní přehled používá Shelly.",
+              "grid_options": {
+                "columns": "full"
+              }
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "cards": [
+            {
+              "type": "heading",
+              "heading": "Řízení a údržba",
+              "heading_style": "title",
+              "icon": "mdi:cog",
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "entities",
+              "title": "Automatizace TČ – přepínače",
+              "show_header_toggle": false,
+              "entities": [
+                {
+                  "entity": "@@AUTO_LEGACY@@",
+                  "name": "Původní řízení v2.6"
+                },
+                {
+                  "entity": "@@AUTO_LEGACY_RESET@@",
+                  "name": "Původní reset"
+                },
+                {
+                  "entity": "@@AUTO_RESET@@",
+                  "name": "Reset cooldownu v2.0"
+                },
+                {
+                  "entity": "@@AUTO_CURRENT@@",
+                  "name": "Řízení TČ v2.0"
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "markdown",
+              "content": "{% set old = is_state('@@AUTO_LEGACY@@','on') or is_state('@@AUTO_LEGACY_RESET@@','on') %}\n{% set run = is_state('@@AUTO_CURRENT@@','on') %}\n{% set reset = is_state('@@AUTO_RESET@@','on') %}\n**Řízení v2.0:** {{ 'Zapnuté' if run else 'Vypnuté' }} · **Reset v2.0:** {{ 'Zapnutý' if reset else 'Vypnutý' }}  \n**TČ:** {{ {'off':'Vypnuto','heat':'Ruční teplota','auto':'Podle plánu'}.get(states('@@CLIMATE@@'), states('@@CLIMATE@@')) }} · **Export:** {{ states('@@EXPORT@@') }} W  \n**Cooldown:** {{ 'Aktivní' if is_state('@@COOLDOWN@@','on') else 'Neaktivní' }}\n\n{% if old %}⚠️ Před použitím v2.0 vypněte obě původní automatizace.\n{% elif run and not reset %}⚠️ Řízení v2.0 je zapnuté bez resetu cooldownu.\n{% endif %}\n**Nasazení:** vypnout obě původní automatizace → zapnout reset v2.0 → zapnout řízení v2.0. Ruční „Vypnuto“ na Remeze má přednost.\n\n**Pozor:** obě v2.0 mají zatím nastaven start ve vypnutém stavu; po restartu HA je nutné je znovu zapnout.",
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "entities",
+              "title": "Integrace",
+              "show_header_toggle": false,
+              "entities": [
+                {
+                  "entity": "@@UPDATE@@",
+                  "name": "Remeha Home · vlastní fork"
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "markdown",
+              "content": "Generátor a přibalená šablona forku obnovují hlavní přehled i tento detailní podhled společně. Konkrétní názvy entit jsou v místním souboru vazeb.",
+              "grid_options": {
+                "columns": "full"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
