@@ -1,21 +1,22 @@
-# Přenosná zdrojová šablona hlavního pohledu a subview Detaily.
-# Záporné příkony se dle zadání zanedbávají; invalidní měření nejsou nuly.
-# W = okamžitý příkon, kWh = změna odběrových čítačů za kalendářní období.
-# Shelly surové fáze, směry a diagnostika jsou pouze v detailním podhledu.
-# Ovladače umožní ruční povel až při použití uživatelem, generování nic neřídí.
-# JSON storage Lovelace neuchovává YAML komentáře; tato přibalená verze je zachovává.
-# Detail obsahuje i anonymní kontrolu veřejných upstream commitů a čas ověření.
+# Generic public template: no household identifiers, room names or local control logic.
+# Map symbolic entity roles in a private bindings file kept outside the repository.
+# W is current power; kWh is the calendar-period change of import counters.
+# Negative W are clamped for display only; missing/stale readings are unavailable.
+# Shelly raw measurements and upstream diagnostics live in the Details subview.
+# Lovelace JSON storage drops YAML comments but retains the Jinja comments in cards.
 _documentation:
-  purpose: 'Vytápění 66 new: ovládání Remeha, aktuální příkon a kalendářní energie; Shelly pod Detaily.'
-  negative_power: Záporné W se jen v přehledu nahradí nulou; neplatná či stará data nejsou nula.
-  energy: Odběrové čítače Shelly v kWh, stat_type change, kalendářní týden/měsíc/rok v časovém pásmu HA.
-  side_effects: Generátor nevytváří řídicí povely, nemění historii a zachová všechny ostatní pohledy.
-  bindings: Symbolické názvy oddělují přenosnou šablonu od soukromé konfigurace domácnosti.
-  upstream: Dva diagnostické počty commitů od skutečně převzatých SHA a ruční tlačítko kontroly; stav topení se
-    nemění.
+  purpose: Generic English Remeha heating overview with a linked Details subview.
+  bindings: Symbolic entity roles only. Real entity IDs, room names, addresses and local automations belong in a
+    private bindings file or private template.
+  power: W; negative readings are displayed as zero, missing or older-than-180-second readings are unavailable.
+  energy: kWh; changes in import counters during the current calendar week, month and year in the HA timezone.
+  side_effects: Generation is offline; controls write only when used. No history, automations or other views are
+    changed.
+  customization: Use --template for a private main/detail composition and --insert-after for an optional existing
+    view anchor.
 views:
-- title: Vytápění 66 new
-  path: vytapeni-66-new
+- title: Remeha Heating
+  path: remeha-heating
   icon: mdi:heat-pump
   type: sections
   max_columns: 3
@@ -24,21 +25,21 @@ views:
   - type: grid
     cards:
     - type: heading
-      heading: Vytápění 66
+      heading: Remeha Heating
       heading_style: title
       icon: mdi:heat-pump
       grid_options:
         columns: full
       badges:
       - type: button
-        text: Detaily
+        text: Details
         icon: mdi:chart-line
         tap_action:
           action: navigate
-          navigation_path: '@@DASHBOARD_BASE@@/vytapeni-66-new-detaily'
+          navigation_path: '@@DASHBOARD_BASE@@/remeha-heating-details'
     - type: thermostat
       entity: '@@CLIMATE@@'
-      name: Remeha · obytná zóna
+      name: Heating zone
       features:
       - type: climate-hvac-modes
         hvac_modes:
@@ -48,99 +49,100 @@ views:
       grid_options:
         columns: full
     - type: entities
-      title: Aktuální stav a časový program
+      title: Status and schedule
       show_header_toggle: false
       entities:
       - entity: '@@CLIMATE_STATUS@@'
-        name: Stav topné zóny
+        name: Heating zone status
       - entity: '@@THERMAL@@'
-        name: Provoz čerpadla
+        name: Heat pump operation
       - entity: '@@SCHEDULE_TEMP@@'
-        name: Teplota podle plánu
+        name: Scheduled temperature
       - entity: '@@NEXT_TEMP@@'
-        name: Následující teplota
+        name: Next temperature
       - entity: '@@NEXT_TIME@@'
-        name: Následující změna plánu
+        name: Next schedule change
       - entity: '@@FIREPLACE@@'
-        name: Režim krbu
+        name: Fireplace mode
       grid_options:
         columns: full
   - type: grid
     cards:
     - type: heading
-      heading: Teplá voda
+      heading: Domestic hot water
       heading_style: title
       icon: mdi:water-boiler
       grid_options:
         columns: full
     - type: tile
       entity: '@@DHW@@'
-      name: Program TUV
-      icon: mdi:water-boiler
+      name: DHW operation
+      grid_options:
+        columns: full
       features:
       - type: water-heater-operation-modes
         operation_modes:
         - heat_pump
         - performance
         - eco
-      grid_options:
-        columns: full
     - type: tile
       entity: '@@DHW_TEMP@@'
-      name: Teplota vody
+      name: Water temperature
       grid_options:
         columns: 6
     - type: tile
       entity: '@@DHW_MODE@@'
-      name: Aktivita TUV
+      name: DHW activity
       grid_options:
         columns: 6
     - type: entities
-      title: Cílové teploty TUV
+      title: DHW targets
       show_header_toggle: false
       entities:
       - entity: '@@COMFORT@@'
-        name: Comfort
+        name: Comfort temperature
       - entity: '@@ECO@@'
-        name: Eco
+        name: Eco temperature
       grid_options:
         columns: full
     - type: tile
       entity: '@@BOOST@@'
-      name: Boost · rychlý ohřev
-      icon: mdi:water-boiler-auto
-      tap_action:
-        action: toggle
+      name: DHW boost
       grid_options:
         columns: full
+      tap_action:
+        action: toggle
     - type: entities
-      title: Plán a stav
+      title: DHW status and schedule
       show_header_toggle: false
       entities:
       - entity: '@@DHW_STATUS@@'
-        name: Stav ohřevu
+        name: Water heating status
       - entity: '@@DHW_NEXT@@'
-        name: Následující změna TUV
+        name: Next DHW schedule change
       grid_options:
         columns: full
     - type: markdown
-      content: Boost se spouští z programu a jeho vypnutí vrací TUV do programu. Časy a cíle potvrzuje Remeha.
+      content: Boost starts from Schedule mode. Turning it off returns DHW to Schedule. The device confirms supported
+        targets and timing.
       grid_options:
         columns: full
   - type: grid
     cards:
     - type: heading
-      heading: Spotřeba elektřiny
+      heading: Electricity consumption
       heading_style: title
       icon: mdi:lightning-bolt
       grid_options:
         columns: full
     - type: markdown
-      content: '{# Pouze zobrazení: platná měření W, stáří nejvýše 180 s. Záporné W se dle
+      content: '{# Display only: inputs are watts reported within the last 180 seconds.
 
-        zadání zanedbávají. Neznámý či starý údaj není nula. Žádné služby ani spínání. #}
+        Negative power is clamped to zero. Missing or stale readings remain unavailable.
 
-        {% set a=''@@POWER_TC@@'' %}{% set b=''@@POWER_BOILER@@'' %}
+        No services are called and the source measurements and history are unchanged. #}
+
+        {% set a=''@@POWER_HP@@'' %}{% set b=''@@POWER_BACKUP@@'' %}
 
         {% set av=states(a) %}{% set bv=states(b) %}
 
@@ -152,22 +154,22 @@ views:
 
         {% set bp=([bv|float,0]|max) if bf else none %}
 
-        ## {{ ((ap+bp)|round(0)|int) ~ '' W'' if ap is not none and bp is not none else ''—'' }}
+        ## {{ ((ap+bp)|round(0)|int) ~ '' W'' if ap is not none and bp is not none else ''Unavailable'' }}
 
-        **Aktuální příkon · TČ + elektrokotel**
-
-
-        TČ: **{{ (ap|round(0)|int ~ '' W'') if ap is not none else ''nedostupné'' }}** · Elektrokotel: **{{ (bp|round(0)|int
-        ~ '' W'') if bp is not none else ''nedostupný'' }}**
+        **Current power · heat pump + electric backup**
 
 
-        _Záporný příkon = 0 W. Týden, měsíc a rok níže jsou probíhající kalendářní období z odběrových čítačů v
-        kWh._'
+        Heat pump: **{{ (ap|round(0)|int ~ '' W'') if ap is not none else ''Unavailable'' }}** · Backup: **{{ (bp|round(0)|int
+        ~ '' W'') if bp is not none else ''Unavailable'' }}**
+
+
+        _Negative power is displayed as 0 W. Energy below covers the current calendar week, month and year using
+        import counters in kWh._'
       grid_options:
         columns: full
     - type: statistic
-      entity: '@@ENERGY_TC@@'
-      name: TČ · týden
+      entity: '@@ENERGY_HP@@'
+      name: Heat pump · week
       stat_type: change
       period:
         calendar:
@@ -177,8 +179,8 @@ views:
       grid_options:
         columns: 6
     - type: statistic
-      entity: '@@ENERGY_BOILER@@'
-      name: Elektrokotel · týden
+      entity: '@@ENERGY_BACKUP@@'
+      name: Electric backup · week
       stat_type: change
       period:
         calendar:
@@ -188,8 +190,8 @@ views:
       grid_options:
         columns: 6
     - type: statistic
-      entity: '@@ENERGY_TC@@'
-      name: TČ · měsíc
+      entity: '@@ENERGY_HP@@'
+      name: Heat pump · month
       stat_type: change
       period:
         calendar:
@@ -199,8 +201,8 @@ views:
       grid_options:
         columns: 6
     - type: statistic
-      entity: '@@ENERGY_BOILER@@'
-      name: Elektrokotel · měsíc
+      entity: '@@ENERGY_BACKUP@@'
+      name: Electric backup · month
       stat_type: change
       period:
         calendar:
@@ -210,8 +212,8 @@ views:
       grid_options:
         columns: 6
     - type: statistic
-      entity: '@@ENERGY_TC@@'
-      name: TČ · rok
+      entity: '@@ENERGY_HP@@'
+      name: Heat pump · year
       stat_type: change
       period:
         calendar:
@@ -221,8 +223,8 @@ views:
       grid_options:
         columns: 6
     - type: statistic
-      entity: '@@ENERGY_BOILER@@'
-      name: Elektrokotel · rok
+      entity: '@@ENERGY_BACKUP@@'
+      name: Electric backup · year
       stat_type: change
       period:
         calendar:
@@ -234,398 +236,259 @@ views:
   - type: grid
     cards:
     - type: heading
-      heading: Topná křivka a aktivity
+      heading: Heating curve and activities
       heading_style: title
       icon: mdi:chart-bell-curve-cumulative
       grid_options:
         columns: full
     - type: entities
-      title: Topná křivka
+      title: Heating curve
       show_header_toggle: false
       entities:
       - entity: '@@SLOPE@@'
-        name: Sklon křivky
+        name: Curve slope
       - entity: '@@BASE@@'
-        name: Základ křivky (°C)
+        name: Curve base temperature (°C)
       grid_options:
         columns: full
     - type: entities
-      title: Teploty aktivit programu
+      title: Heating activity temperatures
       show_header_toggle: false
       entities:
       - entity: '@@ACTIVITY_1@@'
-        name: Domů
+        name: Activity 1
       - entity: '@@ACTIVITY_2@@'
-        name: Spánek
+        name: Activity 2
       - entity: '@@ACTIVITY_3@@'
-        name: Večer – VT
+        name: Activity 3
       - entity: '@@ACTIVITY_4@@'
-        name: Práce
+        name: Activity 4
       - entity: '@@ACTIVITY_5@@'
-        name: Komfort
+        name: Activity 5
       grid_options:
         columns: full
     - type: markdown
-      content: Rozsahy ovladačů poskytuje zařízení. Změna upraví parametr Remeha; pouhé otevření dashboardu nic
-        nenastavuje.
+      content: Control ranges come from the device. Using a control changes a Remeha parameter; opening or generating
+        this dashboard only reads data.
       grid_options:
         columns: full
   - type: grid
     cards:
     - type: heading
-      heading: Teploty a tlak
+      heading: Temperatures and pressure
       heading_style: title
       icon: mdi:home-thermometer
       grid_options:
         columns: full
     - type: tile
       entity: '@@ROOM@@'
-      name: Místnost · Remeha
+      name: Room temperature
       grid_options:
         columns: 6
     - type: tile
       entity: '@@OUTDOOR@@'
-      name: Venku
+      name: Outdoor temperature
       grid_options:
         columns: 6
     - type: tile
       entity: '@@PRESSURE@@'
-      name: Tlak topné vody
+      name: Water pressure
       grid_options:
         columns: full
     - type: history-graph
-      title: Teploty za 24 hodin
+      title: Temperatures · last 24 hours
       hours_to_show: 24
       entities:
       - entity: '@@ROOM@@'
-        name: Místnost
+        name: Room
       - entity: '@@OUTDOOR@@'
-        name: Venku
+        name: Outdoor
       - entity: '@@DHW_TEMP@@'
-        name: TUV
+        name: DHW
       grid_options:
         columns: full
-  - type: grid
-    cards:
-    - type: heading
-      heading: Další vytápění v domě
-      heading_style: title
-      icon: mdi:home-floor-1
-      grid_options:
-        columns: full
-    - type: thermostat
-      entity: '@@TRV@@'
-      name: Kuchyně 66 · hlavice TRV
-      grid_options:
-        columns: full
-    - type: markdown
-      title: Termostat koupelna 66
-      content: "{% set e = '@@BATHROOM@@' %}\n{% set mode = states(e) %}\n**Termostat:** {{ 'Vypnutý' if mode ==\
-        \ 'off' else 'Zapnutý' if mode == 'heat_cool' else 'Nedostupný' }}  \n{% set t = state_attr(e, 'current_temperature')\
-        \ %}\n**Teplota místnosti (přepočet W4):** {{ (t | float / 2) | round(1) if is_number(t) else '—' }} °C\
-        \  \n**Nastavený cíl:** {{ states('@@BATHROOM_TARGET@@') }} °C\n\nRozsah **5–35 °C**, krok **0,5 °C**. Cíl\
-        \ je propojen s Tuya; změna posuvníku nemění zapnutí/vypnutí termostatu."
-      grid_options:
-        columns: full
-    - type: entities
-      title: Cílová teplota
-      show_header_toggle: false
-      entities:
-      - entity: '@@BATHROOM_TARGET@@'
-        name: Požadovaná teplota
-        icon: mdi:thermometer
-      grid_options:
-        columns: full
-    - type: horizontal-stack
-      cards:
-      - type: button
-        name: Zapnout termostat
-        icon: mdi:power
-        tap_action:
-          action: perform-action
-          perform_action: climate.set_hvac_mode
-          target:
-            entity_id: '@@BATHROOM@@'
-          data:
-            hvac_mode: heat_cool
-          confirmation:
-            text: Zapnout termostat koupelny 66 podle nastavené cílové teploty?
-      - type: button
-        name: Vypnout termostat
-        icon: mdi:power-off
-        tap_action:
-          action: perform-action
-          perform_action: climate.set_hvac_mode
-          target:
-            entity_id: '@@BATHROOM@@'
-          data:
-            hvac_mode: 'off'
-          confirmation:
-            text: Vypnout termostat koupelny 66?
-      grid_options:
-        columns: full
-    - type: markdown
-      content: '**Podlahová sonda:** údaj 68 °C z aplikace není tímto přepočtem opraven ani potvrzen jako skutečná
-        teplota podlahy. Integrace Tuya jej nevystavuje samostatně. Tato karta podle něj nic nespíná.'
-      grid_options:
-        columns: full
-- title: Vytápění 66 new – detaily
-  path: vytapeni-66-new-detaily
+- title: Remeha Heating — Details
+  path: remeha-heating-details
   icon: mdi:chart-line
   type: sections
   max_columns: 3
   subview: true
-  back_path: '@@DASHBOARD_BASE@@/vytapeni-66-new'
+  back_path: '@@DASHBOARD_BASE@@/remeha-heating'
   sections:
   - type: grid
     cards:
     - type: heading
-      heading: Shelly · měření TČ
+      heading: Shelly measurements
       heading_style: title
       icon: mdi:meter-electric
       grid_options:
         columns: full
       badges:
       - type: button
-        text: Zpět
+        text: Back
         icon: mdi:arrow-left
         tap_action:
           action: navigate
-          navigation_path: '@@DASHBOARD_BASE@@/vytapeni-66-new'
+          navigation_path: '@@DASHBOARD_BASE@@/remeha-heating'
     - type: entities
-      title: Činný výkon · surové hodnoty W
+      title: Raw active power · W
       show_header_toggle: false
       entities:
-      - entity: '@@POWER_TC@@'
-        name: TČ · součet
-      - entity: '@@POWER_HBOX@@'
-        name: Hbox
-      - entity: '@@POWER_OUTDOOR@@'
-        name: Venkovní jednotka
-      - entity: '@@POWER_BOILER@@'
-        name: Elektrokotel
+      - entity: '@@POWER_HP@@'
+        name: Heat pump
+      - entity: '@@POWER_BACKUP@@'
+        name: Electric backup
       grid_options:
         columns: full
     - type: entities
-      title: Čítače energie · kWh
+      title: Energy counters · kWh
       show_header_toggle: false
       entities:
-      - entity: '@@ENERGY_TC@@'
-        name: TČ · odběr
-      - entity: '@@ENERGY_TC_RETURN@@'
-        name: TČ · opačný směr
-      - entity: '@@ENERGY_BOILER@@'
-        name: Elektrokotel · odběr
-      - entity: '@@ENERGY_BOILER_RETURN@@'
-        name: Elektrokotel · opačný směr
+      - entity: '@@ENERGY_HP@@'
+        name: Heat pump · import
+      - entity: '@@ENERGY_HP_RETURN@@'
+        name: Heat pump · reverse direction
+      - entity: '@@ENERGY_BACKUP@@'
+        name: Electric backup · import
+      - entity: '@@ENERGY_BACKUP_RETURN@@'
+        name: Electric backup · reverse direction
       grid_options:
         columns: full
     - type: history-graph
-      title: Surový příkon · 24 hodin
+      title: Raw power · last 24 hours
       hours_to_show: 24
       entities:
-      - entity: '@@POWER_TC@@'
-        name: TČ
-      - entity: '@@POWER_BOILER@@'
-        name: Elektrokotel
+      - entity: '@@POWER_HP@@'
+        name: Heat pump
+      - entity: '@@POWER_BACKUP@@'
+        name: Electric backup
+      grid_options:
+        columns: full
+    - type: entities
+      title: Meter diagnostics
+      show_header_toggle: false
+      entities:
+      - entity: '@@METER_HP_TEMP@@'
+        name: Heat pump meter temperature
+      - entity: '@@METER_BACKUP_TEMP@@'
+        name: Backup meter temperature
       grid_options:
         columns: full
     - type: markdown
-      content: V hlavním přehledu se záporné W zanedbávají a energie opačného směru se do spotřeby nezahrnuje. Zde
-        jsou původní hodnoty Shelly včetně znaménka. Zdrojové čítače ani historie se nemění.
+      content: The main view clamps negative power to zero and excludes reverse-direction energy from consumption.
+        These detail cards show original measurements, including their sign. Stored measurements and history are
+        unchanged.
       grid_options:
         columns: full
   - type: grid
     cards:
     - type: heading
-      heading: Shelly · diagnostika
-      heading_style: title
-      icon: mdi:chip
-      grid_options:
-        columns: full
-    - type: entities
-      title: Zdánlivý výkon a účiník
-      show_header_toggle: false
-      entities:
-      - entity: '@@APPR_TC@@'
-        name: Celkem (VA)
-      - entity: '@@APPR_HBOX@@'
-        name: Hbox (VA)
-      - entity: '@@APPR_OUTDOOR@@'
-        name: TČ ven (VA)
-      - entity: '@@FACTOR_HBOX@@'
-        name: Hbox · účiník
-      - entity: '@@FACTOR_OUTDOOR@@'
-        name: TČ ven · účiník
-      grid_options:
-        columns: full
-    - type: entities
-      title: Teplota měřidel
-      show_header_toggle: false
-      entities:
-      - entity: '@@METER_TC_TEMP@@'
-        name: Shelly TČ
-      - entity: '@@METER_BOILER_TEMP@@'
-        name: Shelly elektrokotel
-      grid_options:
-        columns: full
-    - type: entities
-      title: Kuchyně · detaily TRV
-      show_header_toggle: false
-      entities:
-      - entity: '@@TRV_VALVE@@'
-        name: Otevření ventilu
-      - entity: '@@TRV_BATTERY@@'
-        name: Baterie
-      - entity: '@@TRV_RSSI@@'
-        name: Síla signálu
-      - entity: '@@TRV_CALIBRATION@@'
-        name: Problém kalibrace
-      grid_options:
-        columns: full
-    - type: entities
-      title: Pokojová teplota Shelly
-      show_header_toggle: false
-      entities:
-      - entity: '@@SHELLY_ROOM@@'
-        name: Obývací pokoj
-      grid_options:
-        columns: full
-  - type: grid
-    cards:
-    - type: heading
-      heading: Remeha · zdroje energie
+      heading: Remeha energy sources
       heading_style: title
       icon: mdi:heat-pump-outline
       grid_options:
         columns: full
     - type: entities
-      title: Tepelné čerpadlo · denní údaje API
+      title: Heat pump · daily API data
       show_header_toggle: false
       entities:
       - entity: '@@PUMP_HEAT_IN@@'
-        name: Vytápění · spotřebovaná energie
+        name: Heating · consumed energy
       - entity: '@@PUMP_WATER_IN@@'
-        name: TUV · spotřebovaná energie
+        name: DHW · consumed energy
       - entity: '@@PUMP_COOL_IN@@'
-        name: Chlazení · spotřebovaná energie
+        name: Cooling · consumed energy
       - entity: '@@PUMP_HEAT_OUT@@'
-        name: Vytápění · dodané teplo
+        name: Heating · delivered energy
       - entity: '@@PUMP_WATER_OUT@@'
-        name: TUV · dodané teplo
+        name: DHW · delivered energy
       - entity: '@@PUMP_COOL_OUT@@'
-        name: Chlazení · dodaná energie
+        name: Cooling · delivered energy
       - entity: '@@PUMP_EFFICIENCY@@'
-        name: Sezónní účinnost · je-li dostupná
+        name: Seasonal efficiency, when reported
       grid_options:
         columns: full
     - type: entities
-      title: Elektrická záloha · denní údaje API
+      title: Electric backup · daily API data
       show_header_toggle: false
       entities:
       - entity: '@@BACKUP_HEAT_IN@@'
-        name: Vytápění · spotřebovaná energie
+        name: Heating · consumed energy
       - entity: '@@BACKUP_WATER_IN@@'
-        name: TUV · spotřebovaná energie
+        name: DHW · consumed energy
       - entity: '@@BACKUP_COOL_IN@@'
-        name: Chlazení · spotřebovaná energie
+        name: Cooling · consumed energy
       - entity: '@@BACKUP_HEAT_OUT@@'
-        name: Vytápění · dodané teplo
+        name: Heating · delivered energy
       - entity: '@@BACKUP_WATER_OUT@@'
-        name: TUV · dodané teplo
+        name: DHW · delivered energy
       - entity: '@@BACKUP_COOL_OUT@@'
-        name: Chlazení · dodaná energie
+        name: Cooling · delivered energy
       - entity: '@@BACKUP_EFFICIENCY@@'
-        name: Sezónní účinnost · je-li dostupná
+        name: Seasonal efficiency, when reported
       grid_options:
         columns: full
     - type: markdown
-      content: Údaje Remeha jsou hlášené cloudem a mohou mít zpoždění. Neznámé hodnoty zůstávají neznámé. Nejde
-        o živé měření příkonu; pro kalendářní spotřebu hlavní přehled používá Shelly.
+      content: Remeha cloud data may be delayed or unavailable. Unknown values remain unknown. Calendar consumption
+        in the main view uses the electricity import meters; cloud energy is not live electrical power.
       grid_options:
         columns: full
   - type: grid
     cards:
     - type: heading
-      heading: Řízení a údržba
+      heading: Integration maintenance
       heading_style: title
       icon: mdi:cog
       grid_options:
         columns: full
     - type: entities
-      title: Automatizace TČ – přepínače
-      show_header_toggle: false
-      entities:
-      - entity: '@@AUTO_LEGACY@@'
-        name: Původní řízení v2.6
-      - entity: '@@AUTO_LEGACY_RESET@@'
-        name: Původní reset
-      - entity: '@@AUTO_RESET@@'
-        name: Reset cooldownu v2.0
-      - entity: '@@AUTO_CURRENT@@'
-        name: Řízení TČ v2.0
-      grid_options:
-        columns: full
-    - type: markdown
-      content: "{% set old = is_state('@@AUTO_LEGACY@@','on') or is_state('@@AUTO_LEGACY_RESET@@','on') %}\n{% set\
-        \ run = is_state('@@AUTO_CURRENT@@','on') %}\n{% set reset = is_state('@@AUTO_RESET@@','on') %}\n**Řízení\
-        \ v2.0:** {{ 'Zapnuté' if run else 'Vypnuté' }} · **Reset v2.0:** {{ 'Zapnutý' if reset else 'Vypnutý' }}\
-        \  \n**TČ:** {{ {'off':'Vypnuto','heat':'Ruční teplota','auto':'Podle plánu'}.get(states('@@CLIMATE@@'),\
-        \ states('@@CLIMATE@@')) }} · **Export:** {{ states('@@EXPORT@@') }} W  \n**Cooldown:** {{ 'Aktivní' if\
-        \ is_state('@@COOLDOWN@@','on') else 'Neaktivní' }}\n\n{% if old %}⚠️ Před použitím v2.0 vypněte obě původní\
-        \ automatizace.\n{% elif run and not reset %}⚠️ Řízení v2.0 je zapnuté bez resetu cooldownu.\n{% endif %}\n\
-        **Nasazení:** vypnout obě původní automatizace → zapnout reset v2.0 → zapnout řízení v2.0. Ruční „Vypnuto“\
-        \ na Remeze má přednost.\n\n**Pozor:** obě v2.0 mají zatím nastaven start ve vypnutém stavu; po restartu\
-        \ HA je nutné je znovu zapnout."
-      grid_options:
-        columns: full
-    - type: entities
-      title: Integrace
+      title: Integration
       show_header_toggle: false
       entities:
       - entity: '@@UPDATE@@'
-        name: Remeha Home · vlastní fork
+        name: Remeha Home update
       grid_options:
         columns: full
     - type: entities
-      title: Nové commity upstreamu
+      title: Upstream commits
       show_header_toggle: false
       entities:
       - entity: '@@UPSTREAM_ORIGINAL@@'
-        name: Původní integrace
+        name: Original integration
       - entity: '@@UPSTREAM_COMMUNITY@@'
-        name: Komunitní fork
+        name: Community fork
       - entity: '@@UPSTREAM_CHECK@@'
-        name: Zkontrolovat upstream
+        name: Check upstream
       grid_options:
         columns: full
     - type: markdown
-      content: '{# Čtecí diagnostika: ukázat čas skutečné kontroly a pevné GitHub odkazy.
+      content: '{# Read-only diagnostics: counts are confirmed by the public GitHub API.
 
-        Počet se nevypočítává z neznámých dat. Chyba/limit API není nula změn. #}
+        A failed or rate-limited check is unavailable, never assumed to be zero. #}
 
-        {% for e,label in [(''@@UPSTREAM_ORIGINAL@@'',''Původní integrace''),(''@@UPSTREAM_COMMUNITY@@'',''Komunitní
+        {% for entity,label in [(''@@UPSTREAM_ORIGINAL@@'',''Original integration''),(''@@UPSTREAM_COMMUNITY@@'',''Community
         fork'')] %}
 
-        **{{ label }}** · {% if is_number(states(e)) %}{{ states(e) }} nových commitů{% else %}kontrola nedostupná
-        ({{ state_attr(e,''error'') or ''čeká na načtení'' }}){% endif %}
+        **{{ label }}** · {% if is_number(states(entity)) %}{{ states(entity) }} new commits{% else %}Check unavailable
+        ({{ state_attr(entity,''error'') or ''Waiting for data'' }}){% endif %}
 
-        {% set stamp=state_attr(e,''checked_at'') %}
+        {% set stamp=state_attr(entity,''checked_at'') %}
 
-        {% if stamp %}Ověřeno: {{ as_timestamp(stamp) | timestamp_custom(''%d.%m.%Y %H:%M'', true) }}{% endif %}
+        {% if stamp %}Checked: {{ as_timestamp(stamp) | timestamp_custom(''%Y-%m-%d %H:%M'', true) }}{% endif %}
 
-        {% if state_attr(e,''compare_url'') %}[Porovnání na GitHubu]({{ state_attr(e,''compare_url'') }}){% endif
-        %}
+        {% if state_attr(entity,''compare_url'') %}[Compare on GitHub]({{ state_attr(entity,''compare_url'') }}){%
+        endif %}
 
 
         {% endfor %}
 
-        Kontrola po 12 hodinách a ručním tlačítkem (nejdříve po 5 minutách; limit GitHubu může čekání prodloužit).
-        Počítají se commity od převzatého základu našeho vydání. Změny posuzujeme před převzetím.'
+        Checks run every 12 hours. The manual button shares a five-minute cache and respects GitHub rate limits.
+        Counts are relative to the upstream commits incorporated into this release; review changes before adopting
+        them.'
       grid_options:
         columns: full
     - type: markdown
-      content: Generátor a přibalená šablona forku obnovují hlavní přehled i tento detailní podhled společně. Konkrétní
-        názvy entit jsou v místním souboru vazeb.
+      content: The generator updates this detail subview together with the main view. Keep real entity mappings
+        and any household-specific extensions in private files outside the repository.
       grid_options:
         columns: full

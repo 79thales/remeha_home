@@ -33,7 +33,7 @@ jobs:
           uses: "hacs/action@main"
           with:
             category: "integration"
-            # Vlastní HACS repozitář nepřidáváme do výchozího katalogu.
-            # Původní upstream neobsahuje LICENSE; cizímu kódu licenci nevymýšlíme.
-            # Vynechané kontroly jsou zde uvedeny výslovně, ostatní musí projít.
+            # Validate as a custom HACS repository, not a default-catalog submission.
+            # Inherited upstream has no LICENSE; do not invent a license for its code.
+            # List skipped checks explicitly; all remaining validation must pass.
             ignore: "license"

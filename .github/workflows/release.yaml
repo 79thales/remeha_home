@@ -1,6 +1,6 @@
 name: Release package
-# Balíček vzniká pouze z publikovaného tagu a obsahuje jen soubory integrace.
-# Manifest musí mít stejnou verzi jako tag, jinak se vydání nezabalí.
+# Package only integration sources from a published tag.
+# Manifest version must match the tag before an installer can be built.
 on:
   release:
     types: [published]

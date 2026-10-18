@@ -1,5 +1,5 @@
-# Kontrola chyb, nepoužitých importů a řazení importů; dlouhé popisné komentáře
-# nejsou omezeny délkou řádku. Runtime integrace vyžaduje HA 2026.8+.
+# Check syntax, unused imports and import ordering. Descriptive comments have no
+# line-length restriction. Integration runtime requires Home Assistant 2026.8+.
 target-version = "py312"
 line-length = 100
 [lint]

@@ -16,3 +16,10 @@ coverage.xml
 # Home Assistant configuration
 config/*
 !config/configuration.yaml
+
+# Private dashboard profiles, bindings, proposals and backups must stay local.
+dashboard-private/
+private/
+*-private.json
+*-private.yaml
+*-private.yml

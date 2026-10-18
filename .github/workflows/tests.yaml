@@ -1,6 +1,6 @@
 name: Home Assistant tests
-# Používá skutečné registry a entity HA 2026.10.1; cloudové API je simulované.
-# Žádná přístupová data domácnosti ani síťové povely zařízení nejsou potřeba.
+# Use real HA 2026.10.1 registries/entities and mocked cloud HTTP.
+# No household credentials or device commands are needed.
 on:
   push:
     branches: [main]

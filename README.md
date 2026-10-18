@@ -1,154 +1,83 @@
-# Remeha Home — fork 79thales
+# Remeha Home for Home Assistant
 
-Samostatně spravovaný fork integrace Remeha Home pro Home Assistant **2026.8 a novější**.
-Zachovává doménu `remeha_home`, identifikátory zařízení a původní režimy
-`heat`, `auto`, `off` i předvolby `clock_program_1` až `clock_program_3`.
-Nainstalovaný termostat musí fungovat v oficiální aplikaci Remeha Home.
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.8.0%2B-41BDF5?logo=home-assistant&logoColor=white&style=flat)](https://www.home-assistant.io/)
+[![HACS Integration](https://img.shields.io/badge/HACS-Integration-41BDF5?logo=home-assistant-community-store&logoColor=white&style=flat)](https://my.home-assistant.io/redirect/hacs_repository/?owner=79thales&repository=remeha_home&category=integration)
+[![Latest release](https://img.shields.io/github/v/release/79thales/remeha_home?label=Release&logo=github&style=flat)](https://github.com/79thales/remeha_home/releases/latest)
+[![Installer downloads, all releases](https://img.shields.io/github/downloads/79thales/remeha_home/remeha_home.zip?label=Downloads%20total&displayAssetName=false&logo=github&style=flat)](https://github.com/79thales/remeha_home/releases)
+[![Installer downloads, latest release](https://img.shields.io/github/downloads/79thales/remeha_home/latest/remeha_home.zip?label=Downloads%20latest&displayAssetName=false&logo=github&style=flat)](https://github.com/79thales/remeha_home/releases/latest)
+[![Validation](https://img.shields.io/github/check-suites/79thales/remeha_home/main?label=Validation&logo=github&style=flat)](https://github.com/79thales/remeha_home/actions)
 
-## Funkce
+<p align="center">
+  <img src="https://raw.githubusercontent.com/home-assistant/brands/master/custom_integrations/remeha_home/logo.png" alt="Remeha Home" width="180">
+</p>
 
-- Opravená registrace zařízení přes `via_device_id`, včetně zón TUV a jednotlivých zdrojů energie.
-- Termostat, stav topení/chlazení, pokojová a venkovní teplota, tlak a programy.
-- Ovládání TUV: program, Comfort, Eco, cílové teploty a přepínač boost, pokud zařízení potvrdí podporu.
-- Sklon a základ topné křivky s mezemi a krokem z API.
-- Teploty jednotlivých topných aktivit programu, oddělené od aktivit chlazení.
-- Energie jednotlivých zdrojů, pokud je cloud vrací; chybějící údaje jsou neznámé a nevytvářejí falešné nuly.
-- Diagnostika dostupnosti funkcí bez identifikátorů domácnosti a přihlašovacích údajů.
-- Sériové zpracování zápisů TUV/číselných parametrů stejné zóny a kontrola hodnot před odesláním.
+HACS displays documentation for the installed version. The unified header and generic English public templates are included from v0.3.1; updating only the default branch does not change an older installed release.
 
-Instalace, načtení a restart integrace pouze čtou data. Nastavení se mění až
-výslovným použitím ovladače nebo zavoláním služby. Dostupnost konkrétních funkcí
-určuje odpověď zařízení; typ tepelného čerpadla sám o sobě nepotvrzuje jejich podporu.
+## English overview
 
-## Instalace přes HACS
+Remeha Home is an independently maintained custom integration for Home Assistant **2026.8 or newer**. This fork preserves the `remeha_home` domain, existing device and entity identities, the `heat`, `auto`, and `off` modes, and the `clock_program_1` to `clock_program_3` presets. Your thermostat must already work in the official Remeha Home app.
 
-1. V HACS přidejte vlastní repozitář `https://github.com/79thales/remeha_home`, kategorie **Integration**.
-2. Nainstalujte vydání tohoto forku a restartujte Home Assistant.
-3. Při nové instalaci přidejte integraci **Remeha Home** a přihlaste se údaji oficiální aplikace.
+### Features
 
-Při přechodu z původní integrace zachovejte její konfigurační položku v
-**Nastavení → Zařízení a služby**. Instalované soubory v
-`custom_components/remeha_home` musí pocházet z jednoho vydání tohoto forku.
-Původní repozitář a tento fork používají stejnou doménu a nemají se instalovat
-souběžně. Neodstraňujte existující zařízení ani entity. Před přechodem vytvořte
-zálohu a ověřte, že HACS následně sleduje tento repozitář.
+- Heating thermostat, operating status, room/outdoor temperature, water pressure, and schedules.
+- Domestic hot water operation, Comfort/Eco targets, and boost when the device confirms support.
+- Heating-curve slope and base temperature with bounds and increments reported by the API.
+- Heating activity temperatures, kept separate from cooling activities.
+- Per-source energy and seasonal efficiency when reported; missing values remain unknown.
+- Modern parent-device registration through `via_device_id`.
+- Serialized writes per zone, input validation, optional-endpoint resilience, and sanitized diagnostics.
+- Independent monitoring of new commits in the original integration and the community fork, with a manual check button and links to GitHub comparisons.
+- An offline **dashboard generator**, generic English JSON/YAML templates, synthetic example bindings, a main heating view, and a linked **Details** subview for raw meter data and diagnostics. See [dashboard generation and privacy](documentation/DASHBOARD.md).
 
-## Ovládání a omezení
+Installing, loading, refreshing, and restarting the integration do not issue heating commands. Settings change only when a control or service is used. Feature availability is based on the device response, not an assumed capability of a heat-pump model.
 
-Boost lze spustit z programu; vypnutí boost vrátí zónu do programu. Délku
-určuje zařízení a API. Eco teplotu lze nastavovat pouze u potvrzeného zásobníku
-`dhwType=Tank`. Pokud v programu není známá aktivní teplota Comfort/Eco,
-obecný ovladač cílové teploty zápis odmítne; lze použít výslovný číselný ovladač.
+## Installation through HACS
 
-Topná křivka se nenastavuje automaticky. Sklon je bezrozměrný, základ v °C.
-Každá změna čte aktuální křivku a zachová druhý parametr. Výpadek API,
-neznámé meze nebo požadavek mimo rozsah zápis zastaví.
+1. Add `https://github.com/79thales/remeha_home` under **HACS → Custom repositories**, category **Integration**.
+2. Install this fork and restart Home Assistant to load its Python code.
+3. For a new setup, open **Settings → Devices & services → Add integration**, choose **Remeha Home**, and sign in using your official app credentials.
 
-Hlavní data se obnovují po 60 s, energie, křivka a aktivity po 15 minutách.
-Po změně se data načtou znovu. API může energetické hodnoty vracet se zpožděním;
-jejich nula není nezávislým měřením příkonu. Neznámé údaje se neodhadují.
-Podrobnosti jsou v [technické dokumentaci](documentation/FORK.md).
+[Open in HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=79thales&repository=remeha_home&category=integration) · [Start configuration](https://my.home-assistant.io/redirect/config_flow_start/?domain=remeha_home) · [Latest release](https://github.com/79thales/remeha_home/releases/latest)
 
-## Vývoj a ověření
+When migrating from the original integration, keep its existing configuration entry, devices, and entities. The original and this fork share one domain and must not be installed side by side. Back up first and ensure HACS tracks this repository. Installed files under `custom_components/remeha_home` must come from one release.
 
-Testy používají Home Assistant 2026.10.1, Python 3.14 a Linux. Cloudové API je
-simulováno; registry a platformy jsou skutečné. Spuštění:
+### Installer downloads
+
+The badges follow the same order and flat style as the maintainer's other integrations. The Home Assistant badge states the minimum supported version. **Validation** summarizes the default branch's GitHub check suites, including HACS, hassfest, code checks, and tests.
+
+HACS installs the `remeha_home.zip` release asset. For manual installation, extract its contents directly into `custom_components/remeha_home`, with `manifest.json` at that directory's root. GitHub's automatic **Source code (zip)** archive has a different layout.
+
+Download badges count installer downloads, including updates and repeated manual downloads. They do not count unique users or active installations, source-code archives, or default-branch installations. GitHub counts may be cached; the integration adds no usage telemetry. See [release packaging](scripts/README.md).
+
+## Controls and data limitations
+
+Boost can start from Schedule mode; turning boost off returns DHW to Schedule. Its duration is determined by the device. Eco temperature control requires confirmed `dhwType=Tank` support. An ambiguous Comfort/Eco schedule target blocks the general target-temperature write; use the explicit supported Comfort or Eco number control instead.
+
+The heating curve is not adjusted automatically. Slope is dimensionless and the base temperature is in °C. Each change reads and preserves the other curve parameter. API failure, unknown bounds, or out-of-range values prevent the write.
+
+Core Remeha data refreshes every 60 seconds; energy, curves, and activities refresh every 15 minutes. Successful writes request a refresh. Cloud energy can be delayed and is not an independent live-power measurement. Missing data is not estimated or replaced with zero. See the [technical design](documentation/FORK.md) and inherited [API notes](documentation/api.md).
+
+## Upstream commit monitoring
+
+Two diagnostic sensors track `msvisser/remeha_home` and `hugo-leij/remeha_home`, branch `main`. Counts are relative to the exact upstream revisions incorporated into this release, not the time of the last check. New commits in this fork are excluded.
+
+The first check runs in the background after platform setup, then every 12 hours. The manual button shares a five-minute cache and respects GitHub rate limits. Each source has a 15-second timeout. Requests use public GitHub metadata without Remeha/HACS tokens or household data.
+
+A confirmed zero means no new commits. Network/HTTP errors, malformed responses, and rewritten history make only the affected sensor unavailable. Attributes expose the check time, last success, error code, retry time where applicable, and comparison links. Monitoring does not merge or install code and does not block the thermostat. Maintainers advance a reference SHA only after reviewing and incorporating the corresponding changes.
+
+## Development and verification
+
+Tests use Home Assistant 2026.10.1, Python 3.14, and Linux. Cloud HTTP is mocked; Home Assistant registries and platforms are real.
 
 ```sh
 python -m pip install -r requirements_test.txt
 pytest -q
 ruff check custom_components tests scripts/build_release.py
+ruff format --check custom_components tests scripts/build_release.py
 ```
 
-Úspěšné testy nepotvrzují podporu každého modelu nebo skutečné provedení povelu
-cloudem. Provozní ověření na zařízení musí zkontrolovat jeho data a logy.
+Passing tests do not establish support for every device or confirm execution of a real cloud command. Keep household bindings, private templates, backups, and registry exports outside the public repository and release package.
 
-## Původ změn
+## Credits
 
-Základem je [msvisser/remeha_home](https://github.com/msvisser/remeha_home).
-Funkční rozšíření a jejich autorská historie byla převzata z
-[hugo-leij/remeha_home](https://github.com/hugo-leij/remeha_home), commit
-`20bf0ffa82055c1b341ae538529af4473fbbb5bf`. Poděkování patří také autorům původních
-komunitních příspěvků, jejichž commity jsou zachovány v historii.
-Vlastní opravy kompatibility, validace, diagnostika, testy a vydání spravuje tento fork.
-
-## Generovat dashboard Vytápění 66 new
-
-Přibalená funkce `generate_dashboard()` v `custom_components/remeha_home/generate_dashboard.py`
-a šablony `dashboard-template.json` / `dashboard-template.yaml` vytvářejí dva pohledy
-společně: hlavní přehled `vytapeni-66-new` a podhled `vytapeni-66-new-detaily`.
-Tlačítko **Detaily** schová surová měření a diagnostiku Shelly, cloudové energie,
-diagnostiku TRV a stav existujících automatizací. Hlavní pohled obsahuje nové
-ovládání TUV, boost, topnou křivku, aktivity, termostaty a přehled spotřeby.
-
-Generátor je samostatný offline nástroj standardního Pythonu. Nenačítá integraci,
-nevolá služby HA a neřídí topení. Konkrétní entity se předávají soukromým JSON
-slovníkem vazeb; všechny názvy mezi `@@...@@` v šabloně musí být navázány na
-existující `entity_id`. `DASHBOARD_BASE` je relativní adresa, například `/lovelace`.
-Vazby je nutné zkontrolovat pro danou domácnost; přibalené rozložení předpokládá
-také měřidla Shelly a doplňkové topné zóny. Ovladače zapisují až při použití.
-
-```sh
-python custom_components/remeha_home/generate_dashboard.py --input dashboard-before.json --bindings bindings-private.json --output dashboard-proposed.json
-```
-
-Vstup je úplná exportovaná konfigurace Lovelace (případně obálka konektoru s
-`config`), výstup je úplná nová konfigurace JSON. Vstup se nemění. Generátor
-zachová obsah a pořadí ostatních pohledů; oba vlastní pohledy aktualizuje bez
-duplicit. Při prvním vytvoření je vloží za původní pohled `tepelne-cerpadlo`,
-případně na konec. Neúplné vazby a duplicitní vlastní cesty odmítne. Před zápisem
-přes API je třeba záloha, kontrola aktuální konfigurace a ověření výsledku.
-
-Okamžitý příkon je součet nezáporných činných výkonů TČ a elektrokotle ve W.
-Záporné hodnoty se pouze v přehledu zobrazují jako 0 W; hodnoty se neobracejí
-absolutní hodnotou. Chybějící, nečíselná nebo déle než 180 s nehlášená data jsou
-nedostupná, nikoli nula. Stáří se posuzuje podle `last_reported`, aby stálá hodnota
-nebyla zaměněna za výpadek. Markdown se aktualizuje při změně měření a díky
-`now()` nejméně každou minutu. Zdrojová historie a měřidla se nemění.
-
-Týdenní, měsíční a roční kWh ukazují změnu samostatných odběrových čítačů TČ a
-elektrokotle od začátku probíhajícího kalendářního období v časovém pásmu HA.
-Nejde o klouzavých 7/30/365 dní. Karty používají existující statistiky recorderu;
-nevytvářejí pomocné měřiče a nezahrnují čítače opačného směru. Chybějící historii
-nedopočítávají. Remeha denní energie jsou zvlášť v detailech, protože cloud může
-mít zpoždění a nehlásí vždy všechny veličiny.
-
-Při změně rozložení upravte funkci i obě šablony společně a ověřte shodu JSON/YAML,
-navigaci, dostupnost vazeb a zachování ostatních pohledů. Zdrojové YAML má české
-komentáře; Lovelace storage ukládá JSON a YAML komentáře nepřenáší. Jinja komentář
-výpočtu zůstává přímo v uloženém obsahu karty. Toto rozšíření zavádí pouze statické
-soubory a nemění běhové řízení integrace.
-
-## Kontrola nových upstream commitů
-
-Od v0.3.0 obsahuje integrace dvě diagnostická čidla **Nové commity · původní
-integrace** / **Nové commity · komunitní fork** a tlačítko **Zkontrolovat upstream**.
-Jsou u prvního zařízení každé konfigurační položky a generovaný dashboard je
-zobrazuje v **Detaily → Řízení a údržba**. HACS dál spravuje vydání našeho forku;
-tato čidla upozorňují na zdrojové commity, které ještě čekají na posouzení.
-
-Zdroje jsou pevně dané: `msvisser/remeha_home` a `hugo-leij/remeha_home`, větev
-`main`. Počet se určuje od referenčních SHA v `upstream.py`, které označují
-skutečně převzatou historii. Kontrola neposouvá referenci. Při převzetí dalších
-upstream změn musí správce zároveň upravit příslušnou referenci, testy a vydání.
-Novější vlastní commity našeho forku se do tohoto počtu nezapočítávají.
-
-První čtení běží po načtení integrace na pozadí, další automaticky každých 12 h.
-Ruční tlačítko používá stejnou 5minutovou cache a respektuje odklad při limitu API.
-Každý zdroj má 15s timeout pro dva anonymní GET: načtení SHA větve a porovnání
-převzatého základu s tímto přesným SHA. Odesílají se pouze veřejné názvy repozitářů,
-větev a SHA; nepoužívá se token Remeha, HACS ani údaje domácnosti. Zámek omezuje
-souběh kontrol a oba zdroje se čtou souběžně, odděleně od 60s cyklu Remeha.
-
-Nula znamená úspěšné potvrzení, že nepřibyly commity. Síťová/HTTP chyba, neplatná
-odpověď, přepsaná nebo vrácená historie znepřístupní jen příslušné čidlo. Atributy
-`error`, `checked_at`, `last_success_at`, `last_success_commits` a případně `retry_at`
-odlišují chybu od posledního známého stavu. Hodnota posledního úspěchu není při
-chybě vydávána za aktuální počet. `compare_url` a `latest_commit_url` umožní ruční
-revizi na GitHubu. Počet je počet commitů, nikoli záruka použitelné opravy.
-
-Kontrola nevytváří merge, instalaci ani řídicí povel a nepotřebuje automatizaci.
-GitHub neblokuje načtení termostatu a jeho výpadek nevyvolává přihlášení do Remeha.
-Při unload/restartu se odpojí plánování a rozpracovanou kontrolu spravuje config
-entry. Po restartu se stav znovu ověřuje; cache ani předpokládané nuly se neobnovují.
-Načtení nového Python kódu tohoto vydání vyžaduje restart HA.
+The integration originates from [msvisser/remeha_home](https://github.com/msvisser/remeha_home). Community features and their author history were incorporated from [hugo-leij/remeha_home](https://github.com/hugo-leij/remeha_home), revision `20bf0ffa82055c1b341ae538529af4473fbbb5bf`. This fork maintains compatibility fixes, validation, diagnostics, tests, and releases. The logo is served from [Home Assistant Brands](https://github.com/home-assistant/brands/tree/master/custom_integrations/remeha_home).

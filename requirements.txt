@@ -1,2 +1,2 @@
-# Vývojové prostředí odpovídá testované verzi Home Assistantu.
+# Development dependencies match the tested Home Assistant version.
 -r requirements_test.txt

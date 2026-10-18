@@ -1,103 +1,57 @@
-# Technický popis forku 79thales
+# Technical design
 
-## Inicializace a identita
+## Setup and identity
 
-`__init__.py` sestaví OAuth API, předá ConfigEntry koordinátoru a počká na první
-úspěšné načtení. Teprve poté se spouštějí platformy binary_sensor, climate,
-number, sensor, switch a water_heater. Neúspěšné přihlášení vyžádá reautentizaci;
-chyba hlavních dat využívá standardní retry koordinátoru HA.
+`__init__.py` builds the OAuth API, passes the config entry to the main coordinator, and waits for its first successful refresh. It then loads binary_sensor, button, climate, number, sensor, switch, and water_heater. Authentication failure requests reauthentication; core-data failure uses the normal HA retry behavior.
 
-Koordinátor registruje nadřazený spotřebič pod jeho původním identifikátorem
-API a správnou konfigurační položkou. Vrácené interní ID předává zónám a zdrojům
-energie jako `via_device_id`. Stejné zařízení proto zachová ID při restartu,
-opakovaném čtení i přechodu z původní integrace. Identifikátory stejného názvu
-u jiného účtu se nerozliší odhadem, ale vlastníkem ConfigEntry.
+The coordinator registers each parent appliance with its original API identifier and config-entry owner. It passes the returned internal device ID to zones and energy producers as `via_device_id`. Existing IDs survive refreshes, restarts, and migration from upstream. Identical cloud identifiers in different accounts are separated by config-entry ownership.
 
-Doména, jedinečná ID původních entit, režim `heat=Manual`, `auto=Scheduling`
-a předvolby programů zůstávají původní. Odstranění nebo přejmenování entit se
-při startu neprovádí. Změna automatizací není součástí integrace.
+The integration preserves the domain, original unique IDs, `heat=Manual`, `auto=Scheduling`, and schedule presets. Setup does not rename or remove entities and does not modify user automations.
 
-## Data, čas a chyby
+## Data, time, and failures
 
-Hlavní dashboard se čte po 60 s. Energie a volitelné endpointy mají interval
-15 minut. Každý požadavek API má limit 30 s, volitelné čtení křivky/aktivit
-navíc limit 10 s. I neúspěšné volitelné čtení se opakuje až po intervalu.
-Po zápisu do křivky/aktivit se cache odstraní a nové čtení proběhne ihned.
+Core data refreshes every 60 seconds; energy and optional endpoints refresh every 15 minutes. API requests have a 30-second timeout, with an additional 10-second bound on optional curve/activity reads. Failed optional reads also wait until the next interval. Successful curve/activity writes invalidate their cache and request a fresh read.
 
-HTTP 401 vyžádá nové přihlášení. Síťová chyba volitelné funkce znepřístupní
-její ovladače, ale neznepřístupní hlavní termostat. Při pozdějším potvrzení
-podpory se číselné ovladače přidají přes posluchače koordinátoru; jedinečná ID
-brání duplicitám a unload posluchače odpojí.
+HTTP 401 requests reauthentication. Optional network failures make the corresponding controls unavailable without disabling the thermostat. A coordinator listener adds controls when support becomes known later; stable unique IDs prevent duplicates, and unload disconnects listeners.
 
-Časy požadavků energetického API a evidence jeho dne jsou explicitně UTC.
-Nejde o nezávislý součet pro lokální kalendářní den. Senzory časů zachovávají
-časový offset odpovědi, naivní čas se vykládá v nastaveném pásmu HA a převádí
-na UTC. Neplatné časy a sentinel roku 1 znamenají neznámý údaj.
+Energy request timestamps and day tracking use UTC. Cloud daily totals are not an independent local-calendar meter. Timestamp sensors preserve API offsets, interpret naive times in HA's configured timezone, and convert to UTC. Invalid times and the year-one sentinel mean unknown.
 
-Energie jsou kWh, plynové objemy m³. Převod plynu vyžaduje skutečnou kladnou
-výhřevnost kWh/m³ z API spotřebiče; bez ní se objem nepočítá. Prázdná odpověď,
-null, neplatná čísla, výpadek nebo chybějící zdroj se nepřevádějí na nulu.
-Skutečná nula vrácená API se zachová. Cloudové součty nejsou měření živého výkonu.
+Energy is in kWh; gas volume is in m³. Conversion requires a real positive calorific value in kWh/m³ from the appliance API. Empty responses, nulls, invalid numbers, outages, and missing producers are not replaced with zero. A real reported zero is retained. Cloud totals are not live power measurements.
 
-## Příkazy, priorita a souběh
+## Commands, priority, and concurrency
 
-Neexistuje nová automatická priorita řízení: povely vznikají jen voláním služby
-HA, ovladačem nebo existující uživatelskou automatizací. Restart, přidání entity
-a obnova dat žádný povel nevytváří. Čekající povely se po restartu neobnovují.
+The integration adds no autonomous heating-control priority. Commands originate from explicit HA services, controls, or existing user automations. Setup, restart, entity addition, and refresh issue no heating commands. Pending commands are not replayed after restart.
 
-Nové zápisy TUV, boost a číselných parametrů sdílejí asyncio.Lock podle ID zóny.
-Dokončí se postupně, chyba i zrušení úlohy zámek uvolní. Zápisy se automaticky
-neopakují; po timeoutu nelze předpokládat, zda cloud povel provedl. Následující
-čtení určí skutečný stav. Zámek neblokuje mobilní aplikaci nebo jiný HA účet.
+New DHW, boost, and number writes share an `asyncio.Lock` per zone. Completion is serialized; errors and cancellation release the lock. Writes are not automatically retried because a timeout does not establish whether the cloud executed a request. Subsequent reads confirm the actual state. This lock does not coordinate with the official app or another HA instance.
 
-Číselný vstup musí být konečné číslo v potvrzeném rozsahu API. Sklon je
-bezrozměrný, teploty v °C. Krok vychází z API, u TUV zůstává rozlišení UI 0,5 °C.
-Meze ani fyzikální limity se z modelu zařízení neodhadují. Během výpadku smí UI
-zobrazit poslední potvrzené meze; nový zápis vyžaduje současná platná data.
+Numeric inputs must be finite and within API-confirmed bounds. Slope is dimensionless; temperatures are in °C. Steps come from the API, with 0.5 °C UI resolution for DHW. Device-model guesses do not establish physical limits. Last confirmed bounds may remain visible during an outage, but writes require valid current data.
 
-Křivka vyžaduje v jednom POST sklon i základ. Před zápisem se oba načtou,
-validují a změní se jen vybraný. Nelze zabránit externí změně mezi GET a POST,
-protože cloud nenabízí podmíněný zápis. Aktivity obdobně nejprve načtou celý
-seznam a změní jednu Heating položku, bez záměny za Cooling stejného čísla.
+The heating-curve POST requires slope and base together. Each write fetches and validates both, changing only the selected parameter. The cloud has no conditional-write mechanism, so an external change between GET and POST cannot be excluded. Activities similarly fetch the complete list and modify a Heating entry without confusing it with a Cooling entry of the same number.
 
-Boost je dostupný jen při výslovně potvrzené capabilityBoostMode. Start
-vyžaduje Scheduling; konec přepne do Scheduling. Neznámý typ TUV se nepovažuje
-za Tank. Stav se u nových ovladačů potvrzuje až po úspěšném API; neúspěšný zápis
-nesmí zanechat zdánlivě novou hodnotu v UI. U klimatu se převzatý optimistický
-stav při chybě vrací na předchozí hodnotu a další poll potvrdí skutečnost.
+Boost requires an explicitly confirmed `capabilityBoostMode`. Starting requires Scheduling; stopping returns to Scheduling. Unknown DHW types are not assumed to be Tank. New controls confirm state after successful writes. Failed writes must not leave a false target in the UI. The inherited climate entity restores its previous optimistic state on error and later polling confirms reality.
 
-## Diagnostika a soubory
+## Independent upstream checks
 
-Diagnostika používá explicitní výběr typů, režimů a příznaků dostupnosti.
-Neexportuje konfiguraci OAuth, tokeny, názvy domácnosti, identifikátory zón,
-sériová čísla, adresy ani surové cloudové odpovědi. Při rozšiřování je nutné
-zachovat tento seznam povolených polí.
+`upstream.py` uses a separate read-only coordinator for two fixed public GitHub repositories and the exact SHA revisions incorporated into this fork. `button.py` requests a refresh; two diagnostic sensor instances expose counts and metadata. Initial checking runs as a config-entry background task after platform setup and cannot block thermostat setup.
 
-Produkční kód je v custom_components/remeha_home. Testy obsahují pouze
-syntetická data. Soukromé zálohy, registry a historie domácnosti patří mimo
-repozitář a nesmějí se přidávat do Git ani do vydání.
+Automatic checks run every 12 hours, with a five-minute shared manual cache. Sources run concurrently with a 15-second timeout each. Each check fetches the branch SHA and compares the incorporated baseline with that immutable SHA. Counts use `ahead_by`, not the number of commits on the first response page.
 
-## Testy a vydání
+Requests contain only public repository names, branch names, and SHA values. They use neither Remeha nor HACS credentials. HTTP/network failures, malformed responses, and rewritten/rolled-back history make the affected count unavailable. Last success is a separate attribute. Rate-limit headers defer retries; redirects are rejected. Config-entry unload/restart manages background-task cancellation and removes scheduled listeners.
 
-Testovací plugin 0.13.372 je svázán s HA 2026.10.1 a Pythonem 3.14.
-Testy pokrývají registry, opakované načtení, izolaci účtů, dostupnost při
-výpadku volitelných údajů, zachování heat, chyby zápisů, TUV, boost,
-křivku, aktivity, souběh, diagnostiku a načtení všech šesti platforem bez povelu.
+The baseline advances only when a maintainer reviews and incorporates upstream changes. Monitoring does not merge, install, or issue heating commands. It does not change the main Remeha polling interval or write priorities.
 
-Workflow zvlášť kontroluje HACS/hassfest, styl a testy. Release ZIP obsahuje
-jen Python a JSON integrace, nikoli testy nebo podklady domácnosti. Manifest
-musí odpovídat tagu. Vydání neprovádí instalaci do HA ani restart instance.
+## Diagnostics and privacy
 
-Validace HACS je pro vlastní repozitář. Výslovně vynechává katalogové kontrolu
-license: převzatý upstream neobsahuje LICENSE a fork mu novou licenci
-nepřiděluje. Manifest, hacs.json, metadata a ostatní kontroly se ověřují běžně.
+Diagnostics allowlist technical types, modes, and capability flags. They do not export OAuth configuration, tokens, household names, zone identifiers, serial numbers, addresses, or raw cloud responses. New fields must preserve that allowlist.
 
-## Nezávislá kontrola upstreamů (v0.3.0)
+Production code lives under `custom_components/remeha_home`. Tests use synthetic data. Household backups, history, registry exports, and dashboard profiles belong outside the public repository and release package.
 
-`upstream.py` spravuje čtecí koordinátor GitHubu se dvěma pevnými zdroji a SHA
-skutečně převzatých revizí. `button.py` pouze žádá obnovení; dvě nové třídy čidel
-v `sensor.py` poskytují počet a metadata. Zapojení v `__init__.py` spouští první
-kontrolu jako úlohu config entry na pozadí až po načtení platforem. Kód povelů,
-priorita řízení i časování Remeha se nemění. Podrobné intervaly, chyby, cache a
-postup posunu převzaté reference jsou popsány v README a přímo u implementace.
-Generátor i oba formáty šablony zobrazují čidla a ruční tlačítko jen v detailech.
+The [dashboard generator](DASHBOARD.md) contains no household paths, room layout, or local control logic. Its English public JSON/YAML templates use symbolic entity roles and synthetic example bindings. Private templates can preserve existing main/detail compositions without publishing them. Generation is offline; publishing a new template does not edit a running dashboard.
+
+## Tests and releases
+
+Test plugin 0.13.372 uses Home Assistant 2026.10.1 and Python 3.14. Tests cover registry identity, restart-style reloads, account isolation, missing optional data, the existing heat contract, write errors, DHW/boost, curves, activities, concurrency, diagnostics, all seven platforms, upstream HTTP failures/rate limits, and dashboard generation/privacy.
+
+Separate workflows run HACS/hassfest, Ruff, and tests. The installer ZIP includes Python, JSON, and YAML integration sources, not tests or household profiles. Its manifest version must match the release tag. Publishing a release does not install it or restart a user's HA instance. See [packaging](../scripts/README.md).
+
+HACS validation targets a custom repository. Its `license` check is explicitly skipped because inherited upstream has no LICENSE and this fork does not invent a license for that code. Manifest, HACS metadata, and other checks still run.

@@ -1,5 +1,5 @@
 name: Code checks
-# Každý push/PR ověří syntaxi, importy a formát. Nespouští živé zařízení.
+# Every push/PR checks syntax, imports and formatting without using live devices.
 on:
   push:
     branches: [main]
