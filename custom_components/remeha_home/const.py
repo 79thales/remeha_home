@@ -13,7 +13,11 @@ from homeassistant.const import UnitOfEnergy, UnitOfPressure, UnitOfTemperature,
 
 DOMAIN = "remeha_home"
 
+# Appliance status values come from the regular read-only dashboard response.
+# Missing fields remain unknown; no new entity writes to the device.
 APPLIANCE_SENSOR_TYPES = [
+    SensorEntityDescription(key="operatingMode", name="Operating Mode"),
+    SensorEntityDescription(key="errorStatus", name="Error Status"),
     SensorEntityDescription(
         key="waterPressure",
         name="Water Pressure",
@@ -210,6 +214,30 @@ HOT_WATER_ZONE_SENSOR_TYPES = [
         key="nextSwitchTime",
         name="Next Setpoint Time",
         device_class=SensorDeviceClass.TIMESTAMP,
+    ),
+]
+
+# Optional boolean fields are interpreted only when the API actually returns
+# booleans. None, missing data and malformed types remain unknown, not False.
+APPLIANCE_BINARY_SENSOR_TYPES = [
+    (
+        BinarySensorEntityDescription(
+            key="applianceOnline", name="Online", device_class=BinarySensorDeviceClass.CONNECTIVITY
+        ),
+        lambda value: value,
+    ),
+    (
+        BinarySensorEntityDescription(
+            key="waterPressureOK",
+            name="Water Pressure Problem",
+            device_class=BinarySensorDeviceClass.PROBLEM,
+        ),
+        lambda value: not value,
+    ),
+    (BinarySensorEntityDescription(key="preHeat.active", name="Pre-heat"), lambda value: value),
+    (
+        BinarySensorEntityDescription(key="holidaySchedule.active", name="Holiday Mode"),
+        lambda value: value,
     ),
 ]
 

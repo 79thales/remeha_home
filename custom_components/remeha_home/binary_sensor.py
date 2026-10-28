@@ -16,6 +16,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    APPLIANCE_BINARY_SENSOR_TYPES,
     CLIMATE_ZONE_BINARY_SENSOR_TYPES,
     DOMAIN,
     HOT_WATER_ZONE_BINARY_SENSOR_TYPES,
@@ -33,6 +34,13 @@ async def async_setup_entry(
 
     entities = []
     for appliance in coordinator.data["appliances"]:
+        # Read-only appliance diagnostics use the existing parent device identity.
+        for description, transform in APPLIANCE_BINARY_SENSOR_TYPES:
+            entities.append(
+                RemehaHomeBinarySensor(
+                    coordinator, appliance["applianceId"], description, transform
+                )
+            )
         for climate_zone in appliance["climateZones"]:
             climate_zone_id = climate_zone["climateZoneId"]
             for (
@@ -91,12 +99,22 @@ class RemehaHomeBinarySensor(CoordinatorEntity, BinarySensorEntity):
         return self.coordinator.get_by_id(self.item_id)
 
     @property
-    def is_on(self) -> bool:
+    def is_on(self) -> bool | None:
         """Return the measurement value for this sensor."""
         data = self._data
         for part in self.entity_description.key.split("."):
+            # A missing nested field or null response is unknown, never a false alarm.
+            if not isinstance(data, dict) or part not in data:
+                return None
             data = data[part]
-
+        if data is None:
+            return None
+        if (
+            self.entity_description.key
+            in {"applianceOnline", "waterPressureOK", "preHeat.active", "holidaySchedule.active"}
+            and type(data) is not bool
+        ):
+            return None
         return self.transform_func(data)
 
     @property

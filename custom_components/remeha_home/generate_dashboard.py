@@ -12,7 +12,7 @@ extensions available without publishing them or hard-coding them in this module.
 
 Power is measured in W; negative values are clamped only for display. Missing or
 older-than-180-second readings remain unavailable. Calendar energy is in kWh,
-using changes in import counters. Raw measurements and diagnostics are in Details.
+using changes in import counters. Raw measurements, read-only appliance status, and diagnostics are in Details.
 """
 
 from __future__ import annotations

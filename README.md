@@ -24,6 +24,7 @@ Remeha Home is an independently maintained custom integration for Home Assistant
 - Heating-curve slope and base temperature with bounds and increments reported by the API.
 - Heating activity temperatures, kept separate from cooling activities.
 - Per-source energy and seasonal efficiency when reported; missing values remain unknown.
+- Read-only appliance connectivity, pressure-problem, operating/error, pre-heat and holiday status when reported. Missing fields remain unknown.
 - Modern parent-device registration through `via_device_id`.
 - Serialized writes per zone, input validation, optional-endpoint resilience, and sanitized diagnostics.
 - Independent monitoring of new commits in the original integration and the community fork, with a manual check button and links to GitHub comparisons.

@@ -1,9 +1,5 @@
-# Generic public template: no household identifiers, room names or local control logic.
-# Map symbolic entity roles in a private bindings file kept outside the repository.
-# W is current power; kWh is the calendar-period change of import counters.
-# Negative W are clamped for display only; missing/stale readings are unavailable.
-# Shelly raw measurements and upstream diagnostics live in the Details subview.
-# Lovelace JSON storage drops YAML comments but retains the Jinja comments in cards.
+# Public template; entity bindings and private layouts stay outside the repository.
+# Appliance and holiday status are read-only; missing values are unknown.
 _documentation:
   purpose: Generic English Remeha heating overview with a linked Details subview.
   bindings: Symbolic entity roles only. Real entity IDs, room names, addresses and local automations belong in a
@@ -439,6 +435,24 @@ views:
       heading: Integration maintenance
       heading_style: title
       icon: mdi:cog
+      grid_options:
+        columns: full
+    - type: entities
+      title: Appliance status
+      show_header_toggle: false
+      entities:
+      - entity: '@@APPLIANCE_ONLINE@@'
+        name: Online
+      - entity: '@@PRESSURE_PROBLEM@@'
+        name: Water pressure problem
+      - entity: '@@OPERATING_MODE@@'
+        name: Operating mode
+      - entity: '@@ERROR_STATUS@@'
+        name: Error status
+      - entity: '@@PREHEAT@@'
+        name: Pre-heat
+      - entity: '@@HOLIDAY_STATUS@@'
+        name: Holiday mode (read-only)
       grid_options:
         columns: full
     - type: entities

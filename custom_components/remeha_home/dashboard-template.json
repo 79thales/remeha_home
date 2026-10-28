@@ -675,6 +675,40 @@
             },
             {
               "type": "entities",
+              "title": "Appliance status",
+              "show_header_toggle": false,
+              "entities": [
+                {
+                  "entity": "@@APPLIANCE_ONLINE@@",
+                  "name": "Online"
+                },
+                {
+                  "entity": "@@PRESSURE_PROBLEM@@",
+                  "name": "Water pressure problem"
+                },
+                {
+                  "entity": "@@OPERATING_MODE@@",
+                  "name": "Operating mode"
+                },
+                {
+                  "entity": "@@ERROR_STATUS@@",
+                  "name": "Error status"
+                },
+                {
+                  "entity": "@@PREHEAT@@",
+                  "name": "Pre-heat"
+                },
+                {
+                  "entity": "@@HOLIDAY_STATUS@@",
+                  "name": "Holiday mode (read-only)"
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "entities",
               "title": "Integration",
               "show_header_toggle": false,
               "entities": [

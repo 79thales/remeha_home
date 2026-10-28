@@ -6,7 +6,7 @@
 
 The public files contain symbolic entity roles and generic labels. They contain no real household entity IDs, room names, building identifiers, meter-channel assignments, local automations, or local control sequences. `dashboard-bindings.example.json` contains deliberately synthetic `*.example_*` IDs; it cannot be installed unchanged.
 
-The overview includes a heating thermostat, status/schedule data, DHW operation/targets/boost, current electricity consumption, heating-curve/activity controls, temperatures, and pressure. Details contains raw Shelly meter data, cloud energy, integration updates, and upstream-commit diagnostics. The five numbered activity roles are a generic example; adapt a private template to the activities and devices actually present in your installation.
+The overview includes a heating thermostat, status/schedule data, DHW operation/targets/boost, current electricity consumption, heating-curve/activity controls, temperatures, and pressure. Details contains raw Shelly meter data, cloud energy, read-only appliance/holiday status, integration updates, and upstream-commit diagnostics. Missing appliance fields remain unknown. The five numbered activity roles are a generic example; adapt a private template to the activities and devices actually present in your installation.
 
 ## Inputs, output, and side effects
 
@@ -79,3 +79,5 @@ Cloud energy stays in Details because reporting can be delayed or incomplete. Un
 Update the generator and both template formats together. Tests check JSON/YAML equivalence, symbolic-only public entities, synthetic examples, private-template support, navigation, invalid inputs, preservation, and idempotence. Lovelace storage uses JSON and drops YAML comments; Jinja comments remain part of stored card text.
 
 This English public template does not rename or translate an existing live dashboard. To preserve a local composition, continue using its private template and bindings. Published historical Git objects and earlier release archives are separate from the current public template; this change does not rewrite repository history.
+
+The appliance status roles are `APPLIANCE_ONLINE`, `PRESSURE_PROBLEM`, `OPERATING_MODE`, `ERROR_STATUS`, `PREHEAT`, and `HOLIDAY_STATUS`. The holiday entity is read-only; no automatic restoration or holiday control is added.
