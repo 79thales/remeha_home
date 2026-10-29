@@ -11,6 +11,7 @@ from homeassistant.components.number import NumberDeviceClass, NumberEntity
 from homeassistant.const import EntityCategory, UnitOfTemperature
 from homeassistant.core import callback
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
@@ -70,6 +71,13 @@ async def async_setup_entry(hass, entry, async_add_entities):
                     )
             for zone in appliance.get("climateZones", []):
                 zone_id = zone["climateZoneId"]
+                if zone.get("capabilityTemporaryOverrideEndTime") is True and valid_bounds(
+                    zone.get("setPointMin"), zone.get("setPointMax"), 0.5
+                ):
+                    entities.extend(
+                        TemporaryInput(coordinator, zone_id, kind)
+                        for kind in ("temperature", "duration")
+                    )
                 curve = coordinator.get_heating_curve(zone_id) or {}
                 for parameter, config in HEATING_CURVE_PARAMS.items():
                     if (
@@ -105,6 +113,59 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     add_supported()
     entry.async_on_unload(coordinator.async_add_listener(add_supported))
+
+
+class TemporaryInput(CoordinatorEntity, RestoreEntity, NumberEntity):
+    """Remember a per-zone draft; editing this number sends no cloud command.
+
+    Duration is minutes (1–10080, a UI bound rather than a device limit).
+    The temperature range is read from the zone in °C. Restored drafts never
+    start an override; a fresh capability and range check occurs at the button.
+    """
+
+    _attr_has_entity_name = True
+
+    def __init__(self, coordinator, zone_id, kind):
+        super().__init__(coordinator)
+        self.climate_zone_id, self.kind = zone_id, kind
+        self._attr_unique_id = f"{DOMAIN}_{zone_id}_temporary_{kind}"
+        self._attr_name = f"Temporary {kind}"
+        self._attr_native_step = 0.5 if kind == "temperature" else 1
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS if kind == "temperature" else "min"
+        self._attr_device_info = coordinator.get_device_info(zone_id)
+        self._attr_native_value = None
+
+    @property
+    def native_min_value(self):
+        return (self.coordinator.get_by_id(self.climate_zone_id) or {}).get("setPointMin", 5) if self.kind == "temperature" else 1
+
+    @property
+    def native_max_value(self):
+        return (self.coordinator.get_by_id(self.climate_zone_id) or {}).get("setPointMax", 30) if self.kind == "temperature" else 10080
+
+    async def async_added_to_hass(self):
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        try:
+            value = float(last.state) if last else None
+            validate_value(value, self.native_min_value, self.native_max_value)
+        except (ValueError, ServiceValidationError):
+            value = None
+        if value is None:
+            value = (self.coordinator.get_by_id(self.climate_zone_id) or {}).get("setPoint") if self.kind == "temperature" else 60
+        self._set_draft(value)
+
+    def _set_draft(self, value):
+        self._attr_native_value = value
+        drafts = self.coordinator.__dict__.setdefault("temporary_drafts", {})
+        drafts.setdefault(self.climate_zone_id, {})[self.kind] = value
+
+    async def async_set_native_value(self, value):
+        validate_value(value, self.native_min_value, self.native_max_value)
+        if self.kind == "duration" and not float(value).is_integer():
+            raise ServiceValidationError("Duration must be a whole number of minutes")
+        self._set_draft(value)
+        self.async_write_ha_state()
 
 
 class RemehaNumber(CoordinatorEntity, NumberEntity):

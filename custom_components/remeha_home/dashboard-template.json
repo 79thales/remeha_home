@@ -59,6 +59,35 @@
             },
             {
               "type": "entities",
+              "title": "Temporary temperature",
+              "show_header_toggle": false,
+              "entities": [
+                {
+                  "entity": "@@TEMPORARY_TEMPERATURE@@",
+                  "name": "Temperature"
+                },
+                {
+                  "entity": "@@TEMPORARY_DURATION@@",
+                  "name": "Duration (minutes)"
+                },
+                {
+                  "entity": "@@TEMPORARY_START@@",
+                  "name": "Start temporary temperature"
+                }
+              ],
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "markdown",
+              "content": "{# Cloud data is authoritative; an unknown value is not an inactive override. #}\n{% set e = '@@CLIMATE@@' %}\n{% if state_attr(e, 'temporary_override_command_pending') %}**Temporary setting:** waiting for confirmation from Remeha.{% elif state_attr(e, 'temporary_override_active') == true %}**Temporary setting:** active. {% set end = state_attr(e, 'temporary_override_end_time') %}{% if end and as_timestamp(end, none) %}Ends: {{ as_timestamp(end) | timestamp_custom('%Y-%m-%d %H:%M', true) }}.{% else %}End time unavailable.{% endif %}{% elif state_attr(e, 'temporary_override_active') == false %}**Temporary setting:** inactive.{% else %}**Temporary setting:** unavailable.{{ '' }}{% endif %}\n\nChoose a temperature and duration, then press Start. This feature requires a running schedule and a compatible device. The device controls the end time; later manual changes can supersede the setting.",
+              "grid_options": {
+                "columns": "full"
+              }
+            },
+            {
+              "type": "entities",
               "title": "Status and schedule",
               "show_header_toggle": false,
               "entities": [

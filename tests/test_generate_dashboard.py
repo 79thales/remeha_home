@@ -64,6 +64,19 @@ def test_duplicate_view_rejected():
         generate_dashboard(source, bindings)
 
 
+def test_timed_temperature_bindings():
+    """Controls remain configurable and a swapped button is rejected offline."""
+    source, bindings = fixture_data()
+    cards = generate_dashboard(source, bindings)["views"][2]["sections"][0]["cards"]
+    controls = next(card for card in cards if card.get("title") == "Temporary temperature")
+    assert [row["entity"] for row in controls["entities"]] == [
+        bindings["TEMPORARY_TEMPERATURE"], bindings["TEMPORARY_DURATION"], bindings["TEMPORARY_START"]
+    ]
+    bindings["TEMPORARY_START"] = "number.example_wrong"
+    with pytest.raises(ValueError, match="Invalid domain.*TEMPORARY_START"):
+        generate_dashboard(source, bindings)
+
+
 def test_private_template_and_explicit_anchor():
     """Private names and paths come from the caller, never from public defaults."""
     source, _ = fixture_data()

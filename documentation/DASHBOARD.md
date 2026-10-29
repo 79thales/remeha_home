@@ -6,7 +6,9 @@
 
 The public files contain symbolic entity roles and generic labels. They contain no real household entity IDs, room names, building identifiers, meter-channel assignments, local automations, or local control sequences. `dashboard-bindings.example.json` contains deliberately synthetic `*.example_*` IDs; it cannot be installed unchanged.
 
-The overview includes a heating thermostat, status/schedule data, DHW operation/targets/boost, current electricity consumption, heating-curve/activity controls, temperatures, and pressure. Details contains raw Shelly meter data, cloud energy, read-only appliance/holiday status, integration updates, and upstream-commit diagnostics. Missing appliance fields remain unknown. The five numbered activity roles are a generic example; adapt a private template to the activities and devices actually present in your installation.
+The overview includes a heating thermostat, temporary temperature controls, status/schedule data, DHW operation/targets/boost, current electricity consumption, heating-curve/activity controls, temperatures, and pressure. Details contains raw Shelly meter data, cloud energy, read-only appliance/holiday status, integration updates, and upstream-commit diagnostics. Missing appliance fields remain unknown. The five numbered activity roles are a generic example; adapt a private template to the activities and devices actually present in your installation.
+
+The temporary-temperature card binds to two per-zone number entities and a start button. Select °C and duration in minutes, then press the button; merely changing the two selections does not command the heater. This feature requires an active schedule and a device reporting support for an override end time. The displayed state and end time come from the cloud; pending and unknown do not mean a command succeeded. Remeha controls the end time, and subsequent manual changes may supersede it. The generator does not create or bind these entities automatically.
 
 ## Inputs, output, and side effects
 
@@ -60,6 +62,7 @@ The repository ignores `dashboard-private/`, `private/`, and `*-private.json/yam
 | `METER_HP_TEMP`, `METER_BACKUP_TEMP` | Meter diagnostic temperatures in °C. |
 | `PUMP_*`, `BACKUP_*` | Remeha per-source energy in kWh and reported seasonal efficiency. |
 | `UPDATE` | Existing update entity for this fork. |
+| `TEMPORARY_TEMPERATURE`, `TEMPORARY_DURATION`, `TEMPORARY_START` | Zone-specific temperature number, duration number (minutes), and start button; bind all three to the same zone. |
 | `UPSTREAM_ORIGINAL`, `UPSTREAM_COMMUNITY`, `UPSTREAM_CHECK` | Two diagnostic commit-count sensors and the manual check button. |
 
 ### Current power

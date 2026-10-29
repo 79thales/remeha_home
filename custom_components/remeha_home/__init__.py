@@ -12,6 +12,7 @@ from .api import RemehaHomeAPI, RemehaHomeOAuth2Implementation
 from .config_flow import RemehaHomeLoginFlowHandler
 from .const import DOMAIN
 from .coordinator import RemehaHomeUpdateCoordinator
+from .export_override import ExportOverrideManager
 from .upstream import RemehaUpstreamCoordinator
 
 PLATFORMS: list[Platform] = [
@@ -49,6 +50,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     coordinator = RemehaHomeUpdateCoordinator(hass, api, entry)
 
     await coordinator.async_config_entry_first_refresh()
+
+    # Load only the journal; setup must never replay a pending heating command.
+    coordinator.export_override_manager = ExportOverrideManager(hass, entry.entry_id)
+    await coordinator.export_override_manager.async_load()
 
     hass.data[DOMAIN][entry.entry_id] = {
         "api": api,

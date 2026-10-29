@@ -1,15 +1,13 @@
 # Public template; entity bindings and private layouts stay outside the repository.
-# Appliance and holiday status are read-only; missing values are unknown.
+# Temporary temperature is a user-initiated cloud command; status may be unknown.
 _documentation:
   purpose: Generic English Remeha heating overview with a linked Details subview.
-  bindings: Symbolic entity roles only. Real entity IDs, room names, addresses and local automations belong in a
-    private bindings file or private template.
+  bindings: Symbolic entity roles only. Real entity IDs, room names, addresses and local automations belong in a private bindings
+    file or private template.
   power: W; negative readings are displayed as zero, missing or older-than-180-second readings are unavailable.
   energy: kWh; changes in import counters during the current calendar week, month and year in the HA timezone.
-  side_effects: Generation is offline; controls write only when used. No history, automations or other views are
-    changed.
-  customization: Use --template for a private main/detail composition and --insert-after for an optional existing
-    view anchor.
+  side_effects: Generation is offline; controls write only when used. No history, automations or other views are changed.
+  customization: Use --template for a private main/detail composition and --insert-after for an optional existing view anchor.
 views:
 - title: Remeha Heating
   path: remeha-heating
@@ -42,6 +40,34 @@ views:
         - 'off'
         - heat
         - auto
+      grid_options:
+        columns: full
+    - type: entities
+      title: Temporary temperature
+      show_header_toggle: false
+      entities:
+      - entity: '@@TEMPORARY_TEMPERATURE@@'
+        name: Temperature
+      - entity: '@@TEMPORARY_DURATION@@'
+        name: Duration (minutes)
+      - entity: '@@TEMPORARY_START@@'
+        name: Start temporary temperature
+      grid_options:
+        columns: full
+    - type: markdown
+      content: '{# Cloud data is authoritative; an unknown value is not an inactive override. #}
+
+        {% set e = ''@@CLIMATE@@'' %}
+
+        {% if state_attr(e, ''temporary_override_command_pending'') %}**Temporary setting:** waiting for confirmation from
+        Remeha.{% elif state_attr(e, ''temporary_override_active'') == true %}**Temporary setting:** active. {% set end =
+        state_attr(e, ''temporary_override_end_time'') %}{% if end and as_timestamp(end, none) %}Ends: {{ as_timestamp(end)
+        | timestamp_custom(''%Y-%m-%d %H:%M'', true) }}.{% else %}End time unavailable.{% endif %}{% elif state_attr(e, ''temporary_override_active'')
+        == false %}**Temporary setting:** inactive.{% else %}**Temporary setting:** unavailable.{{ '''' }}{% endif %}
+
+
+        Choose a temperature and duration, then press Start. This feature requires a running schedule and a compatible device.
+        The device controls the end time; later manual changes can supersede the setting.'
       grid_options:
         columns: full
     - type: entities
@@ -119,8 +145,8 @@ views:
       grid_options:
         columns: full
     - type: markdown
-      content: Boost starts from Schedule mode. Turning it off returns DHW to Schedule. The device confirms supported
-        targets and timing.
+      content: Boost starts from Schedule mode. Turning it off returns DHW to Schedule. The device confirms supported targets
+        and timing.
       grid_options:
         columns: full
   - type: grid
@@ -159,8 +185,8 @@ views:
         ~ '' W'') if bp is not none else ''Unavailable'' }}**
 
 
-        _Negative power is displayed as 0 W. Energy below covers the current calendar week, month and year using
-        import counters in kWh._'
+        _Negative power is displayed as 0 W. Energy below covers the current calendar week, month and year using import counters
+        in kWh._'
       grid_options:
         columns: full
     - type: statistic
@@ -264,8 +290,8 @@ views:
       grid_options:
         columns: full
     - type: markdown
-      content: Control ranges come from the device. Using a control changes a Remeha parameter; opening or generating
-        this dashboard only reads data.
+      content: Control ranges come from the device. Using a control changes a Remeha parameter; opening or generating this
+        dashboard only reads data.
       grid_options:
         columns: full
   - type: grid
@@ -371,9 +397,8 @@ views:
       grid_options:
         columns: full
     - type: markdown
-      content: The main view clamps negative power to zero and excludes reverse-direction energy from consumption.
-        These detail cards show original measurements, including their sign. Stored measurements and history are
-        unchanged.
+      content: The main view clamps negative power to zero and excludes reverse-direction energy from consumption. These detail
+        cards show original measurements, including their sign. Stored measurements and history are unchanged.
       grid_options:
         columns: full
   - type: grid
@@ -425,8 +450,8 @@ views:
       grid_options:
         columns: full
     - type: markdown
-      content: Remeha cloud data may be delayed or unavailable. Unknown values remain unknown. Calendar consumption
-        in the main view uses the electricity import meters; cloud energy is not live electrical power.
+      content: Remeha cloud data may be delayed or unavailable. Unknown values remain unknown. Calendar consumption in the
+        main view uses the electricity import meters; cloud energy is not live electrical power.
       grid_options:
         columns: full
   - type: grid
@@ -483,26 +508,24 @@ views:
         {% for entity,label in [(''@@UPSTREAM_ORIGINAL@@'',''Original integration''),(''@@UPSTREAM_COMMUNITY@@'',''Community
         fork'')] %}
 
-        **{{ label }}** · {% if is_number(states(entity)) %}{{ states(entity) }} new commits{% else %}Check unavailable
-        ({{ state_attr(entity,''error'') or ''Waiting for data'' }}){% endif %}
+        **{{ label }}** · {% if is_number(states(entity)) %}{{ states(entity) }} new commits{% else %}Check unavailable ({{
+        state_attr(entity,''error'') or ''Waiting for data'' }}){% endif %}
 
         {% set stamp=state_attr(entity,''checked_at'') %}
 
         {% if stamp %}Checked: {{ as_timestamp(stamp) | timestamp_custom(''%Y-%m-%d %H:%M'', true) }}{% endif %}
 
-        {% if state_attr(entity,''compare_url'') %}[Compare on GitHub]({{ state_attr(entity,''compare_url'') }}){%
-        endif %}
+        {% if state_attr(entity,''compare_url'') %}[Compare on GitHub]({{ state_attr(entity,''compare_url'') }}){% endif %}
 
 
         {% endfor %}
 
-        Checks run every 12 hours. The manual button shares a five-minute cache and respects GitHub rate limits.
-        Counts are relative to the upstream commits incorporated into this release; review changes before adopting
-        them.'
+        Checks run every 12 hours. The manual button shares a five-minute cache and respects GitHub rate limits. Counts are
+        relative to the upstream commits incorporated into this release; review changes before adopting them.'
       grid_options:
         columns: full
     - type: markdown
-      content: The generator updates this detail subview together with the main view. Keep real entity mappings
-        and any household-specific extensions in private files outside the repository.
+      content: The generator updates this detail subview together with the main view. Keep real entity mappings and any household-specific
+        extensions in private files outside the repository.
       grid_options:
         columns: full

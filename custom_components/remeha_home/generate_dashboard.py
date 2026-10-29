@@ -26,6 +26,13 @@ from typing import Any
 
 TOKEN = re.compile(r"@@([A-Z0-9_]+)@@")
 ENTITY_ID = re.compile(r"[a-z_]+\.[a-z0-9_]+")
+# These controls are created by the integration per climate zone. Reject an
+# accidentally swapped binding before producing a dashboard with a broken button.
+TIMED_CONTROL_DOMAINS = {
+    "TEMPORARY_TEMPERATURE": "number",
+    "TEMPORARY_DURATION": "number",
+    "TEMPORARY_START": "button",
+}
 VIEW_PATH = re.compile(r"[a-zA-Z0-9_-]+")
 DASHBOARD_PATH = re.compile(r"/[a-zA-Z0-9_-]+(?:/[a-zA-Z0-9_-]+)*")
 TEMPLATE = Path(__file__).with_name("dashboard-template.json")
@@ -99,6 +106,9 @@ def generate_dashboard(
             )
             if not valid:
                 raise ValueError(f"Invalid binding: {key}")
+            expected_domain = TIMED_CONTROL_DOMAINS.get(key)
+            if expected_domain and not item.startswith(f"{expected_domain}."):
+                raise ValueError(f"Invalid domain for binding: {key}")
             return item
 
         return TOKEN.sub(resolve, value)

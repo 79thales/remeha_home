@@ -1,0 +1,68 @@
+start_export_override:
+  name: Start export temperature overlay
+  description: Experimentally raise an existing timed user override, preserving its original end time. Requires a confirmed cloud state.
+  target:
+    entity:
+      integration: remeha_home
+      domain: climate
+  fields:
+    temperature:
+      name: Export target temperature
+      description: Target in °C; never lowers the confirmed user temperature.
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 0.5
+          unit_of_measurement: °C
+    guard_entity_id:
+      name: Export guard
+      description: Binary sensor that is on only when export, window and source freshness all permit heating.
+      required: true
+      selector:
+        entity:
+          domain: binary_sensor
+    guard_valid_until:
+      name: Guard valid until
+      description: Future ISO 8601 timestamp with timezone; the request is rejected at or after this time.
+      required: true
+      selector:
+        text:
+    measurement_entity_id:
+      name: Export measurement
+      description: Numeric sensor whose last reported time is checked for freshness.
+      required: true
+      selector:
+        entity:
+          domain: sensor
+    measurement_max_age_seconds:
+      name: Maximum measurement age
+      description: Maximum allowed age of the last report in seconds; must be positive.
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 86400
+          unit_of_measurement: s
+restore_export_override:
+  name: Restore user temperature after export
+  description: Restore the saved user temperature only if the cloud still matches the confirmed export overlay and its original end is in the future.
+  target:
+    entity:
+      integration: remeha_home
+      domain: climate
+reconcile_export_override:
+  name: Check an export override command
+  description: Read the cloud and confirm a pending export command without sending another heating command.
+  target:
+    entity:
+      integration: remeha_home
+      domain: climate
+discard_export_override_record:
+  name: Discard export override record
+  description: Forget the saved baseline without changing heating. This permanently gives up restoration from that record.
+  target:
+    entity:
+      integration: remeha_home
+      domain: climate

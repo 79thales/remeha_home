@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import voluptuous as vol
 from homeassistant.components.climate import (
     ATTR_HVAC_MODE,
     ClimateEntity,
@@ -16,13 +17,23 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, PRECISION_HALVES, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .api import RemehaHomeAPI
 from .const import DOMAIN
 from .coordinator import RemehaHomeUpdateCoordinator
+from .export_override import (
+    discard_export_record,
+    invalidate_local_export,
+    reconcile_export,
+    restore_export,
+    start_export,
+)
+from .util import serialized_command
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -98,6 +109,27 @@ async def async_setup_entry(
             entities.append(RemehaHomeClimateEntity(api, coordinator, climate_zone_id))
 
     async_add_entities(entities)
+    platform = entity_platform.async_get_current_platform()
+    platform.async_register_entity_service(
+        "start_export_override",
+        {
+            vol.Required("temperature"): vol.Coerce(float),
+            vol.Required("guard_entity_id"): str,
+            vol.Required("guard_valid_until"): str,
+            vol.Required("measurement_entity_id"): str,
+            vol.Required("measurement_max_age_seconds"): vol.Coerce(float),
+        },
+        "async_start_export_override",
+    )
+    platform.async_register_entity_service(
+        "restore_export_override", {}, "async_restore_export_override"
+    )
+    platform.async_register_entity_service(
+        "reconcile_export_override", {}, "async_reconcile_export_override"
+    )
+    platform.async_register_entity_service(
+        "discard_export_override_record", {}, "async_discard_export_override_record"
+    )
 
 
 class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
@@ -183,6 +215,71 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
         return get_remeha_mode_to_hvac_mode(appliance_type).get(mode)
 
     @property
+    def extra_state_attributes(self) -> dict:
+        """Expose cloud-reported state without treating absent data as inactive.
+
+        Both ordinary and timed overrides use TemporaryOverride; this flag
+        cannot identify which client issued the command. The end is a cloud
+        timestamp, not confirmation that a previously sent request succeeded.
+        """
+        data = self._data or {}
+        mode = data.get("zoneMode")
+        override = data.get("temporaryOverride")
+        manager = getattr(self.coordinator, "export_override_manager", None)
+        record = manager.records.get(self.climate_zone_id) if manager else None
+        return {
+            "remeha_zone_mode": mode,
+            "temporary_override_active": (mode == "TemporaryOverride") if mode in ("TemporaryOverride", "Scheduling", "Manual", "FrostProtection") else None,
+            "temporary_override_end_time": override.get("endTime") if isinstance(override, dict) and mode == "TemporaryOverride" else None,
+            "temporary_override_end_time_supported": data.get("capabilityTemporaryOverrideEndTime") if isinstance(data.get("capabilityTemporaryOverrideEndTime"), bool) else None,
+            "temporary_override_command_pending": self.climate_zone_id in getattr(self.coordinator, "temporary_pending", set()),
+            "export_override_phase": record.get("phase") if record else None,
+            "export_override_user_temperature": record.get("user_temperature") if record else None,
+            "export_override_end_time": record.get("end_time") if record else None,
+        }
+
+    async def async_start_export_override(
+        self, temperature: float, guard_entity_id: str, guard_valid_until: str,
+        measurement_entity_id: str, measurement_max_age_seconds: float,
+    ) -> None:
+        """Explicitly start the experimental export overlay for this zone."""
+        await start_export(
+            self, temperature, guard_entity_id, guard_valid_until,
+            measurement_entity_id, measurement_max_age_seconds,
+        )
+
+    async def async_restore_export_override(self) -> None:
+        """Explicitly attempt restoration; never called automatically."""
+        await restore_export(self)
+
+    async def async_reconcile_export_override(self) -> None:
+        """Check a pending request against cloud data without changing heating."""
+        await reconcile_export(self)
+
+    async def async_discard_export_override_record(self) -> None:
+        """Forget the saved baseline without sending a heating command."""
+        await discard_export_record(self)
+
+    def _handle_coordinator_update(self) -> None:
+        """Clear the in-memory pending signal only on a confirmed override.
+
+        A stale schedule response or a failed command cannot prove rejection;
+        pending remains until confirmation or integration reload. The latter
+        never resends the command. An external override may also confirm the
+        mode, but its origin is not identifiable from the cloud data.
+        """
+        pending = getattr(self.coordinator, "temporary_pending", {})
+        expected = pending.get(self.climate_zone_id)
+        zone = self._data or {}
+        reported = zone.get("temporaryOverride") or {}
+        reported_end = reported.get("endTime")
+        if (self.coordinator.last_update_success and expected and zone.get("zoneMode") == "TemporaryOverride"
+                and zone.get("setPoint") == expected[0] and isinstance(reported_end, str)
+                and dt_util.parse_datetime(reported_end) == dt_util.parse_datetime(expected[1])):
+            pending.pop(self.climate_zone_id, None)
+        super()._handle_coordinator_update()
+
+    @property
     def hvac_modes(self) -> list[HVACMode]:
         """Return the list of available operation modes."""
         return [HVACMode.OFF, HVACMode.HEAT, HVACMode.AUTO]
@@ -209,14 +306,19 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
         """Return the list of available presets."""
         return list(PRESET_INDEX_TO_PRESET_MODE.values())
 
+    @serialized_command("climate_zone_id")
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set new target temperature, optionally together with a new operation mode."""
         temperature = kwargs.get(ATTR_TEMPERATURE)
+        if self.climate_zone_id in getattr(self.coordinator, "temporary_pending", set()):
+            raise ServiceValidationError("A timed override is awaiting cloud confirmation")
+        await invalidate_local_export(self)
         requested_hvac_mode = kwargs.get(ATTR_HVAC_MODE)
 
         if temperature is None:
             if requested_hvac_mode is not None:
-                await self.async_set_hvac_mode(requested_hvac_mode)
+                # This method already owns the same non-reentrant zone lock.
+                await self.async_set_hvac_mode.__wrapped__(self, requested_hvac_mode)
             return
 
         if requested_hvac_mode is not None and requested_hvac_mode not in self.hvac_modes:
@@ -248,8 +350,10 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
 
         await self.coordinator.async_request_refresh()
 
+    @serialized_command("climate_zone_id")
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new operation mode."""
+        await invalidate_local_export(self)
         if hvac_mode not in self.hvac_modes:
             raise ServiceValidationError("Unsupported HVAC mode")
         _LOGGER.debug("Setting operation mode to %s", hvac_mode)
@@ -282,8 +386,10 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
 
         await self.coordinator.async_request_refresh()
 
+    @serialized_command("climate_zone_id")
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set new preset mode."""
+        await invalidate_local_export(self)
         _LOGGER.debug("Setting preset mode to %s", preset_mode)
 
         if preset_mode not in PRESET_MODE_TO_PRESET_INDEX:

@@ -93,14 +93,20 @@ class RemehaHomeAPI:
         )
         response.raise_for_status()
 
-    async def async_set_temporary_override(self, climate_zone_id: str, setpoint: float):
-        """Set a temporary temperature override for the current schedule in a climate zone."""
+    async def async_set_temporary_override(self, climate_zone_id: str, setpoint: float, end_time=None):
+        """Set an override in °C; optional UTC end time is handled by the device.
+
+        A failed HTTP response is propagated. No local timer or retry is created.
+        The endTime field is based on community BDR API documentation and must
+        only be sent after the zone reports the corresponding capability.
+        """
+        payload = {"roomTemperatureSetPoint": setpoint}
+        if end_time is not None:
+            payload["endTime"] = end_time
         response = await self._async_api_request(
             "POST",
             f"/climate-zones/{climate_zone_id}/modes/temporary-override",
-            json={
-                "roomTemperatureSetPoint": setpoint,
-            },
+            json=payload,
         )
         response.raise_for_status()
 
