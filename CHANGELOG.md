@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 — 2026-10-29
+
+- Add per-zone temporary temperature and duration inputs and a start button for devices reporting a timed override capability.
+- Send the end time to the device; expose cloud-reported status, pending requests, and the override end time.
+- Add experimental, explicitly invoked export-overlay services that preserve the user's target and end time, journal uncertain outcomes, and verify caller-provided guards and measurement freshness.
+- Keep export automation outside the public integration; external cloud writes cannot be atomically compared and may race.
+- Extend the anonymous English dashboard generator, both bundled templates, synthetic bindings, and documentation.
+- Device expiry and repeated override commands require verification on the particular appliance; no setup or restart sends a heating command.
+
 ## 0.3.1 — 2026-10-18
 
 - Replace household-specific public dashboard defaults with a generic English overview and Details subview.

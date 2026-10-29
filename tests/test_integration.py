@@ -284,6 +284,74 @@ async def test_full_platform_setup_has_no_writes_or_via_warning(
     assert await hass.config_entries.async_unload(entry.entry_id)
 
 
+async def test_timed_controls_register_without_writing_and_unload(
+    hass, api, enable_custom_integrations
+):
+    """Set up real HA platforms with a synthetic capable zone and mocked cloud.
+
+    Setting each local draft must update HA without starting a timed override;
+    the button and entity services must be registered, and unload must remove
+    their live states. No test operation presses a button or contacts a device.
+    """
+    dashboard = api.async_get_dashboard.side_effect()
+    zone = dashboard["appliances"][0]["climateZones"][0]
+    zone["capabilityTemporaryOverrideEndTime"] = True
+    zone["zoneMode"] = "Scheduling"
+    api.async_get_dashboard.side_effect = lambda: deepcopy(dashboard)
+
+    entry = MockConfigEntry(domain="remeha_home", title="Test", data={}, unique_id="timed")
+    entry.add_to_hass(hass)
+    with (
+        patch("custom_components.remeha_home.RemehaHomeAPI", return_value=api),
+        patch(
+            "custom_components.remeha_home.upstream.RemehaUpstreamCoordinator._get_json",
+            new=AsyncMock(side_effect=ClientConnectionError()),
+        ),
+        patch(
+            "custom_components.remeha_home.config_entry_oauth2_flow.async_get_config_entry_implementation",
+            new=AsyncMock(),
+        ),
+        patch("custom_components.remeha_home.config_entry_oauth2_flow.OAuth2Session"),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    registry = er.async_get(hass)
+    zone_id = zone["climateZoneId"]
+    climate = registry.async_get_entity_id("climate", "remeha_home", f"remeha_home_{zone_id}")
+    temperature = registry.async_get_entity_id(
+        "number", "remeha_home", f"remeha_home_{zone_id}_temporary_temperature"
+    )
+    duration = registry.async_get_entity_id(
+        "number", "remeha_home", f"remeha_home_{zone_id}_temporary_duration"
+    )
+    button = registry.async_get_entity_id(
+        "button", "remeha_home", f"remeha_home_{zone_id}_start_temporary_temperature"
+    )
+    assert all((climate, temperature, duration, button))
+    for entity_id in (climate, temperature, duration, button):
+        assert hass.states.get(entity_id) is not None
+    for name in (
+        "start_export_override",
+        "restore_export_override",
+        "reconcile_export_override",
+        "discard_export_override_record",
+    ):
+        assert hass.services.has_service("remeha_home", name)
+
+    for entity_id, value in ((temperature, 22.5), (duration, 90)):
+        await hass.services.async_call(
+            "number", "set_value", {"entity_id": entity_id, "value": value}, blocking=True
+        )
+        assert float(hass.states.get(entity_id).state) == value
+    assert not any(call[0].startswith(("async_set_", "async_activate_")) for call in api.mock_calls)
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    for entity_id in (climate, temperature, duration, button):
+        assert hass.states.get(entity_id) is None
+
+
 def test_schedule_does_not_reuse_previous_activity(ready):
     """Neurčitý současný cíl nesmí zdědit dřívější Comfort/Eco."""
     c, _ = ready
