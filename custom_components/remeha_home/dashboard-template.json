@@ -206,6 +206,36 @@
                 },
                 {
                   "type": "button",
+                  "name": "16 h",
+                  "show_icon": false,
+                  "tap_action": {
+                    "action": "perform-action",
+                    "perform_action": "number.set_value",
+                    "target": {
+                      "entity_id": "@@TEMPORARY_DURATION@@"
+                    },
+                    "data": {
+                      "value": 960
+                    }
+                  }
+                },
+                {
+                  "type": "button",
+                  "name": "20 h",
+                  "show_icon": false,
+                  "tap_action": {
+                    "action": "perform-action",
+                    "perform_action": "number.set_value",
+                    "target": {
+                      "entity_id": "@@TEMPORARY_DURATION@@"
+                    },
+                    "data": {
+                      "value": 1200
+                    }
+                  }
+                },
+                {
+                  "type": "button",
                   "name": "24 h",
                   "show_icon": false,
                   "tap_action": {
@@ -216,6 +246,21 @@
                     },
                     "data": {
                       "value": 1440
+                    }
+                  }
+                },
+                {
+                  "type": "button",
+                  "name": "48 h",
+                  "show_icon": false,
+                  "tap_action": {
+                    "action": "perform-action",
+                    "perform_action": "number.set_value",
+                    "target": {
+                      "entity_id": "@@TEMPORARY_DURATION@@"
+                    },
+                    "data": {
+                      "value": 2880
                     }
                   }
                 }

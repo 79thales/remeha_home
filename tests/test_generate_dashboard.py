@@ -94,7 +94,10 @@ def test_duration_presets_only_set_draft_minutes():
         "6 h": 360,
         "8 h": 480,
         "12 h": 720,
+        "16 h": 960,
+        "20 h": 1200,
         "24 h": 1440,
+        "48 h": 2880,
     }
     assert all(action["perform_action"] == "number.set_value" for action in buttons.values())
     assert all(
