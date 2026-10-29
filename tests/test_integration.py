@@ -349,7 +349,10 @@ async def test_timed_controls_register_without_writing_and_unload(
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
     for entity_id in (climate, temperature, duration, button):
-        assert hass.states.get(entity_id) is None
+        # HA may keep registry-backed restored states marked unavailable after
+        # unloading; either absence or that explicit state means no live entity.
+        state = hass.states.get(entity_id)
+        assert state is None or state.state == "unavailable"
 
 
 def test_schedule_does_not_reuse_previous_activity(ready):
