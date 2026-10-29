@@ -10,7 +10,9 @@ IDs, names, room layouts, local automations, and instance-specific navigation
 belong in private files outside the repository. A custom template keeps those
 extensions available without publishing them or hard-coding them in this module.
 
-Power is measured in W; negative values are clamped only for display. Missing or
+Duration presets bind to the same zone's duration number and set draft minutes
+only; starting an override remains a separate explicit action. Power is measured
+in W; negative values are clamped only for display. Missing or
 older-than-180-second readings remain unavailable. Calendar energy is in kWh,
 using changes in import counters. Raw measurements, read-only appliance status, and diagnostics are in Details.
 """

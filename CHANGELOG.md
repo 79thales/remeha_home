@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1 — 2026-10-29
+
+- Add draft-only duration presets from 30 minutes to 24 hours to both anonymous dashboard templates.
+- Keep manual minute input and the separate Start button; choosing a preset never sends a heating command or changes an active override.
+- Preserve user-specific dashboards through the existing private-template generator workflow.
+
 ## 0.5.0 — 2026-10-29
 
 - Add per-zone temporary temperature and duration inputs and a start button for devices reporting a timed override capability.

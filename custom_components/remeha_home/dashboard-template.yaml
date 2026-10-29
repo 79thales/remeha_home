@@ -1,5 +1,5 @@
 # Public template; entity bindings and private layouts stay outside the repository.
-# Temporary temperature is a user-initiated cloud command; status may be unknown.
+# Duration presets change draft minutes only; they never send a heating command.
 _documentation:
   purpose: Generic English Remeha heating overview with a linked Details subview.
   bindings: Symbolic entity roles only. Real entity IDs, room names, addresses and local automations belong in a private bindings
@@ -54,6 +54,102 @@ views:
         name: Start temporary temperature
       grid_options:
         columns: full
+    - type: grid
+      columns: 3
+      square: false
+      cards:
+      - type: button
+        name: 30 min
+        show_icon: false
+        tap_action:
+          action: perform-action
+          perform_action: number.set_value
+          target:
+            entity_id: '@@TEMPORARY_DURATION@@'
+          data:
+            value: 30
+      - type: button
+        name: 1 h
+        show_icon: false
+        tap_action:
+          action: perform-action
+          perform_action: number.set_value
+          target:
+            entity_id: '@@TEMPORARY_DURATION@@'
+          data:
+            value: 60
+      - type: button
+        name: 2 h
+        show_icon: false
+        tap_action:
+          action: perform-action
+          perform_action: number.set_value
+          target:
+            entity_id: '@@TEMPORARY_DURATION@@'
+          data:
+            value: 120
+      - type: button
+        name: 3 h
+        show_icon: false
+        tap_action:
+          action: perform-action
+          perform_action: number.set_value
+          target:
+            entity_id: '@@TEMPORARY_DURATION@@'
+          data:
+            value: 180
+      - type: button
+        name: 4 h
+        show_icon: false
+        tap_action:
+          action: perform-action
+          perform_action: number.set_value
+          target:
+            entity_id: '@@TEMPORARY_DURATION@@'
+          data:
+            value: 240
+      - type: button
+        name: 6 h
+        show_icon: false
+        tap_action:
+          action: perform-action
+          perform_action: number.set_value
+          target:
+            entity_id: '@@TEMPORARY_DURATION@@'
+          data:
+            value: 360
+      - type: button
+        name: 8 h
+        show_icon: false
+        tap_action:
+          action: perform-action
+          perform_action: number.set_value
+          target:
+            entity_id: '@@TEMPORARY_DURATION@@'
+          data:
+            value: 480
+      - type: button
+        name: 12 h
+        show_icon: false
+        tap_action:
+          action: perform-action
+          perform_action: number.set_value
+          target:
+            entity_id: '@@TEMPORARY_DURATION@@'
+          data:
+            value: 720
+      - type: button
+        name: 24 h
+        show_icon: false
+        tap_action:
+          action: perform-action
+          perform_action: number.set_value
+          target:
+            entity_id: '@@TEMPORARY_DURATION@@'
+          data:
+            value: 1440
+      grid_options:
+        columns: full
     - type: markdown
       content: '{# Cloud data is authoritative; an unknown value is not an inactive override. #}
 
@@ -66,8 +162,8 @@ views:
         == false %}**Temporary setting:** inactive.{% else %}**Temporary setting:** unavailable.{{ '''' }}{% endif %}
 
 
-        Choose a temperature and duration, then press Start. This feature requires a running schedule and a compatible device.
-        The device controls the end time; later manual changes can supersede the setting.'
+        Choose a temperature and a duration preset, or enter minutes manually, then press Start. This feature requires a running
+        schedule and a compatible device. The device controls the end time; later manual changes can supersede the setting.'
       grid_options:
         columns: full
     - type: entities

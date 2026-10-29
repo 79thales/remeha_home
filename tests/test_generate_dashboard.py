@@ -79,6 +79,30 @@ def test_timed_temperature_bindings():
         generate_dashboard(source, bindings)
 
 
+def test_duration_presets_only_set_draft_minutes():
+    """Each named choice sets the correct duration and never starts heating."""
+    source, bindings = fixture_data()
+    cards = generate_dashboard(source, bindings)["views"][2]["sections"][0]["cards"]
+    grid = next(card for card in cards if card.get("type") == "grid")
+    buttons = {card["name"]: card["tap_action"] for card in grid["cards"]}
+    assert {name: action["data"]["value"] for name, action in buttons.items()} == {
+        "30 min": 30,
+        "1 h": 60,
+        "2 h": 120,
+        "3 h": 180,
+        "4 h": 240,
+        "6 h": 360,
+        "8 h": 480,
+        "12 h": 720,
+        "24 h": 1440,
+    }
+    assert all(action["perform_action"] == "number.set_value" for action in buttons.values())
+    assert all(
+        action["target"]["entity_id"] == bindings["TEMPORARY_DURATION"]
+        for action in buttons.values()
+    )
+
+
 def test_private_template_and_explicit_anchor():
     """Private names and paths come from the caller, never from public defaults."""
     source, _ = fixture_data()
@@ -118,7 +142,7 @@ def test_public_templates_and_examples_are_synthetic():
     assert yaml.safe_load(TEMPLATE.with_suffix(".yaml").read_text(encoding="utf-8")) == template
     assert not re.search(
         r"\b(?:sensor|climate|number|water_heater|switch|automation|binary_sensor|input_boolean|button|update)\.[a-z0-9_]+",
-        text,
+        text.replace('"number.set_value"', '"__DRAFT_NUMBER_SERVICE__"'),
     )
     _, bindings = fixture_data()
     assert set(re.findall(r"@@([A-Z0-9_]+)@@", text)) == set(bindings)
