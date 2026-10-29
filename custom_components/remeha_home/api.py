@@ -93,7 +93,9 @@ class RemehaHomeAPI:
         )
         response.raise_for_status()
 
-    async def async_set_temporary_override(self, climate_zone_id: str, setpoint: float, end_time=None):
+    async def async_set_temporary_override(
+        self, climate_zone_id: str, setpoint: float, end_time=None
+    ):
         """Set an override in °C; optional UTC end time is handled by the device.
 
         A failed HTTP response is propagated. No local timer or retry is created.

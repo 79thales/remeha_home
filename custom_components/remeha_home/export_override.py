@@ -64,8 +64,11 @@ def _end_time(zone):
 def _matches(zone, temperature, end):
     """Match the observable fields only; they cannot identify a cloud client."""
     try:
-        return (zone.get("zoneMode") == "TemporaryOverride"
-                and zone.get("setPoint") == temperature and _end_time(zone) == end)
+        return (
+            zone.get("zoneMode") == "TemporaryOverride"
+            and zone.get("setPoint") == temperature
+            and _end_time(zone) == end
+        )
     except ServiceValidationError:
         return False
 
@@ -87,7 +90,9 @@ def _manager(entity):
     return manager
 
 
-def _validate_guard(entity, guard_entity_id, guard_valid_until, measurement_entity_id, measurement_max_age_seconds):
+def _validate_guard(
+    entity, guard_entity_id, guard_valid_until, measurement_entity_id, measurement_max_age_seconds
+):
     """Require an active binary guard and a future, timezone-aware deadline.
 
     The caller owns the guard's threshold and window logic. The
@@ -103,11 +108,13 @@ def _validate_guard(entity, guard_entity_id, guard_valid_until, measurement_enti
     end = dt_util.parse_datetime(guard_valid_until) if isinstance(guard_valid_until, str) else None
     if end is None or end.utcoffset() is None or end <= dt_util.utcnow():
         raise ServiceValidationError("Export guard deadline is invalid or expired")
-    if (not isinstance(measurement_entity_id, str)
-            or not measurement_entity_id.startswith("sensor.")
-            or type(measurement_max_age_seconds) not in (int, float)
-            or not isfinite(measurement_max_age_seconds)
-            or measurement_max_age_seconds <= 0):
+    if (
+        not isinstance(measurement_entity_id, str)
+        or not measurement_entity_id.startswith("sensor.")
+        or type(measurement_max_age_seconds) not in (int, float)
+        or not isfinite(measurement_max_age_seconds)
+        or measurement_max_age_seconds <= 0
+    ):
         raise ServiceValidationError("A measurement sensor and positive maximum age are required")
     measurement = entity.hass.states.get(measurement_entity_id)
     try:
@@ -127,7 +134,11 @@ async def invalidate_local_export(entity):
     after that command, even if it selects the same observable temperature.
     """
     manager = getattr(entity.coordinator, "export_override_manager", None)
-    record = manager.records.get(entity.climate_zone_id) if isinstance(manager, ExportOverrideManager) else None
+    record = (
+        manager.records.get(entity.climate_zone_id)
+        if isinstance(manager, ExportOverrideManager)
+        else None
+    )
     if record and record.get("phase") != "intervened":
         await manager.save(entity.climate_zone_id, {**record, "phase": "intervened"})
         entity.async_write_ha_state()
@@ -145,10 +156,16 @@ async def reconcile_export(entity):
     if end is None or end.utcoffset() is None or end <= dt_util.utcnow():
         raise ServiceValidationError("Original override end has passed or is unknown")
     zone = await _fresh(entity)
-    temperature = record.get("export_temperature") if record["phase"] == "start_pending" else record.get("user_temperature")
+    temperature = (
+        record.get("export_temperature")
+        if record["phase"] == "start_pending"
+        else record.get("user_temperature")
+    )
     if not _matches(zone, temperature, end):
         raise ServiceValidationError("Cloud data do not confirm the pending command")
-    await manager.save(zone_id, {**record, "phase": "active"} if record["phase"] == "start_pending" else None)
+    await manager.save(
+        zone_id, {**record, "phase": "active"} if record["phase"] == "start_pending" else None
+    )
     entity.async_write_ha_state()
 
 
@@ -168,8 +185,12 @@ async def discard_export_record(entity):
 
 @serialized_command("climate_zone_id")
 async def start_export(
-    entity, temperature, guard_entity_id, guard_valid_until,
-    measurement_entity_id, measurement_max_age_seconds,
+    entity,
+    temperature,
+    guard_entity_id,
+    guard_valid_until,
+    measurement_entity_id,
+    measurement_max_age_seconds,
 ):
     """Raise an existing override to max(user, export) without changing T.
 
@@ -179,8 +200,16 @@ async def start_export(
     """
     manager = _manager(entity)
     zone_id = entity.climate_zone_id
-    _validate_guard(entity, guard_entity_id, guard_valid_until, measurement_entity_id, measurement_max_age_seconds)
-    if zone_id in manager.records or zone_id in getattr(entity.coordinator, "temporary_pending", {}):
+    _validate_guard(
+        entity,
+        guard_entity_id,
+        guard_valid_until,
+        measurement_entity_id,
+        measurement_max_age_seconds,
+    )
+    if zone_id in manager.records or zone_id in getattr(
+        entity.coordinator, "temporary_pending", {}
+    ):
         raise ServiceValidationError("Previous override command requires review")
     zone = await _fresh(entity)
     if zone.get("zoneMode") != "TemporaryOverride":
@@ -192,12 +221,22 @@ async def start_export(
     if temperature <= user:
         return
     end_text = end.isoformat().replace("+00:00", "Z")
-    record = {"user_temperature": user, "end_time": end_text,
-              "export_temperature": temperature, "phase": "start_pending"}
+    record = {
+        "user_temperature": user,
+        "end_time": end_text,
+        "export_temperature": temperature,
+        "phase": "start_pending",
+    }
     await manager.save(zone_id, record)
     entity.async_write_ha_state()
     try:
-        _validate_guard(entity, guard_entity_id, guard_valid_until, measurement_entity_id, measurement_max_age_seconds)
+        _validate_guard(
+            entity,
+            guard_entity_id,
+            guard_valid_until,
+            measurement_entity_id,
+            measurement_max_age_seconds,
+        )
         if end <= dt_util.utcnow():
             raise ServiceValidationError("Original override expired before export command")
     except ServiceValidationError:

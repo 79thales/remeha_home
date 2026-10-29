@@ -229,23 +229,38 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
         record = manager.records.get(self.climate_zone_id) if manager else None
         return {
             "remeha_zone_mode": mode,
-            "temporary_override_active": (mode == "TemporaryOverride") if mode in ("TemporaryOverride", "Scheduling", "Manual", "FrostProtection") else None,
-            "temporary_override_end_time": override.get("endTime") if isinstance(override, dict) and mode == "TemporaryOverride" else None,
-            "temporary_override_end_time_supported": data.get("capabilityTemporaryOverrideEndTime") if isinstance(data.get("capabilityTemporaryOverrideEndTime"), bool) else None,
-            "temporary_override_command_pending": self.climate_zone_id in getattr(self.coordinator, "temporary_pending", set()),
+            "temporary_override_active": (mode == "TemporaryOverride")
+            if mode in ("TemporaryOverride", "Scheduling", "Manual", "FrostProtection")
+            else None,
+            "temporary_override_end_time": override.get("endTime")
+            if isinstance(override, dict) and mode == "TemporaryOverride"
+            else None,
+            "temporary_override_end_time_supported": data.get("capabilityTemporaryOverrideEndTime")
+            if isinstance(data.get("capabilityTemporaryOverrideEndTime"), bool)
+            else None,
+            "temporary_override_command_pending": self.climate_zone_id
+            in getattr(self.coordinator, "temporary_pending", set()),
             "export_override_phase": record.get("phase") if record else None,
             "export_override_user_temperature": record.get("user_temperature") if record else None,
             "export_override_end_time": record.get("end_time") if record else None,
         }
 
     async def async_start_export_override(
-        self, temperature: float, guard_entity_id: str, guard_valid_until: str,
-        measurement_entity_id: str, measurement_max_age_seconds: float,
+        self,
+        temperature: float,
+        guard_entity_id: str,
+        guard_valid_until: str,
+        measurement_entity_id: str,
+        measurement_max_age_seconds: float,
     ) -> None:
         """Explicitly start the experimental export overlay for this zone."""
         await start_export(
-            self, temperature, guard_entity_id, guard_valid_until,
-            measurement_entity_id, measurement_max_age_seconds,
+            self,
+            temperature,
+            guard_entity_id,
+            guard_valid_until,
+            measurement_entity_id,
+            measurement_max_age_seconds,
         )
 
     async def async_restore_export_override(self) -> None:
@@ -273,9 +288,14 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
         zone = self._data or {}
         reported = zone.get("temporaryOverride") or {}
         reported_end = reported.get("endTime")
-        if (self.coordinator.last_update_success and expected and zone.get("zoneMode") == "TemporaryOverride"
-                and zone.get("setPoint") == expected[0] and isinstance(reported_end, str)
-                and dt_util.parse_datetime(reported_end) == dt_util.parse_datetime(expected[1])):
+        if (
+            self.coordinator.last_update_success
+            and expected
+            and zone.get("zoneMode") == "TemporaryOverride"
+            and zone.get("setPoint") == expected[0]
+            and isinstance(reported_end, str)
+            and dt_util.parse_datetime(reported_end) == dt_util.parse_datetime(expected[1])
+        ):
             pending.pop(self.climate_zone_id, None)
         super()._handle_coordinator_update()
 

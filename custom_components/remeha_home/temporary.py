@@ -27,7 +27,10 @@ async def start_override(entity, temperature, duration_minutes):
     coordinator = entity.coordinator
     await coordinator.async_refresh()
     zone = coordinator.get_by_id(entity.climate_zone_id) or {}
-    if not coordinator.last_update_success or zone.get("capabilityTemporaryOverrideEndTime") is not True:
+    if (
+        not coordinator.last_update_success
+        or zone.get("capabilityTemporaryOverrideEndTime") is not True
+    ):
         raise ServiceValidationError("Timed override capability is not confirmed")
     if zone.get("zoneMode") not in ("Scheduling", "TemporaryOverride"):
         raise ServiceValidationError("Timed override requires schedule mode")
@@ -44,8 +47,6 @@ async def start_override(entity, temperature, duration_minutes):
     pending[entity.climate_zone_id] = (temperature, end_text)
     coordinator.async_update_listeners()
     try:
-        await entity.api.async_set_temporary_override(
-            entity.climate_zone_id, temperature, end_text
-        )
+        await entity.api.async_set_temporary_override(entity.climate_zone_id, temperature, end_text)
     finally:
         await coordinator.async_request_refresh()

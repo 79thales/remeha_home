@@ -29,16 +29,23 @@ async def start_export(entity, temperature):
 def scenario():
     """A cloud with a timed user override; POST updates only the mocked state."""
     end = (dt_util.utcnow() + timedelta(hours=3)).replace(microsecond=0).isoformat()
-    zone = {"zoneMode": "TemporaryOverride", "setPoint": 20.0,
-            "setPointMin": 5.0, "setPointMax": 30.0,
-            "capabilityTemporaryOverrideEndTime": True, "temporaryOverride": {"endTime": end}}
+    zone = {
+        "zoneMode": "TemporaryOverride",
+        "setPoint": 20.0,
+        "setPointMin": 5.0,
+        "setPointMax": 30.0,
+        "capabilityTemporaryOverrideEndTime": True,
+        "temporaryOverride": {"endTime": end},
+    }
     manager = object.__new__(ExportOverrideManager)
     manager.records = {}
+
     async def save(zone_id, record):
         if record is None:
             manager.records.pop(zone_id, None)
         else:
             manager.records[zone_id] = deepcopy(record)
+
     manager.save = AsyncMock(side_effect=save)
     coordinator = Mock()
     coordinator.command_locks = {}
@@ -48,9 +55,11 @@ def scenario():
     coordinator.async_refresh = AsyncMock()
     coordinator.get_by_id.return_value = zone
     api = Mock()
+
     async def post(_zone_id, temperature, end_time):
         zone["setPoint"] = temperature
         zone["temporaryOverride"]["endTime"] = end_time
+
     api.async_set_temporary_override = AsyncMock(side_effect=post)
     entity = Mock(coordinator=coordinator, api=api, climate_zone_id="zone-1")
     states = {

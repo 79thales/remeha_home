@@ -24,9 +24,18 @@ def draft(zone):
 
 @pytest.mark.asyncio
 async def test_timed_override_sends_utc_and_retains_pending():
-    target = draft({"zoneMode": "Scheduling", "capabilityTemporaryOverrideEndTime": True,
-                    "setPointMin": 5, "setPointMax": 30})
-    with patch("custom_components.remeha_home.temporary.dt_util.utcnow", return_value=datetime(2026, 1, 1, tzinfo=timezone.utc)):
+    target = draft(
+        {
+            "zoneMode": "Scheduling",
+            "capabilityTemporaryOverrideEndTime": True,
+            "setPointMin": 5,
+            "setPointMax": 30,
+        }
+    )
+    with patch(
+        "custom_components.remeha_home.temporary.dt_util.utcnow",
+        return_value=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    ):
         await start_override(target, 21.5, 90)
     target.api.async_set_temporary_override.assert_awaited_once_with(
         "synthetic-zone", 21.5, "2026-01-01T01:30:00Z"
@@ -35,10 +44,18 @@ async def test_timed_override_sends_utc_and_retains_pending():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("zone", [
-    {"zoneMode": "Scheduling", "setPointMin": 5, "setPointMax": 30},
-    {"zoneMode": "Manual", "capabilityTemporaryOverrideEndTime": True, "setPointMin": 5, "setPointMax": 30},
-])
+@pytest.mark.parametrize(
+    "zone",
+    [
+        {"zoneMode": "Scheduling", "setPointMin": 5, "setPointMax": 30},
+        {
+            "zoneMode": "Manual",
+            "capabilityTemporaryOverrideEndTime": True,
+            "setPointMin": 5,
+            "setPointMax": 30,
+        },
+    ],
+)
 async def test_unconfirmed_capability_or_manual_mode_never_writes(zone):
     target = draft(zone)
     with pytest.raises(ServiceValidationError):
@@ -48,8 +65,14 @@ async def test_unconfirmed_capability_or_manual_mode_never_writes(zone):
 
 @pytest.mark.asyncio
 async def test_unknown_cloud_result_stays_pending_without_retry():
-    target = draft({"zoneMode": "Scheduling", "capabilityTemporaryOverrideEndTime": True,
-                    "setPointMin": 5, "setPointMax": 30})
+    target = draft(
+        {
+            "zoneMode": "Scheduling",
+            "capabilityTemporaryOverrideEndTime": True,
+            "setPointMin": 5,
+            "setPointMax": 30,
+        }
+    )
     target.api.async_set_temporary_override.side_effect = TimeoutError
     with pytest.raises(TimeoutError):
         await start_override(target, 21, 60)

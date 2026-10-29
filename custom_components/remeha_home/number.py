@@ -131,17 +131,27 @@ class TemporaryInput(CoordinatorEntity, RestoreEntity, NumberEntity):
         self._attr_unique_id = f"{DOMAIN}_{zone_id}_temporary_{kind}"
         self._attr_name = f"Temporary {kind}"
         self._attr_native_step = 0.5 if kind == "temperature" else 1
-        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS if kind == "temperature" else "min"
+        self._attr_native_unit_of_measurement = (
+            UnitOfTemperature.CELSIUS if kind == "temperature" else "min"
+        )
         self._attr_device_info = coordinator.get_device_info(zone_id)
         self._attr_native_value = None
 
     @property
     def native_min_value(self):
-        return (self.coordinator.get_by_id(self.climate_zone_id) or {}).get("setPointMin", 5) if self.kind == "temperature" else 1
+        return (
+            (self.coordinator.get_by_id(self.climate_zone_id) or {}).get("setPointMin", 5)
+            if self.kind == "temperature"
+            else 1
+        )
 
     @property
     def native_max_value(self):
-        return (self.coordinator.get_by_id(self.climate_zone_id) or {}).get("setPointMax", 30) if self.kind == "temperature" else 10080
+        return (
+            (self.coordinator.get_by_id(self.climate_zone_id) or {}).get("setPointMax", 30)
+            if self.kind == "temperature"
+            else 10080
+        )
 
     async def async_added_to_hass(self):
         await super().async_added_to_hass()
@@ -152,7 +162,11 @@ class TemporaryInput(CoordinatorEntity, RestoreEntity, NumberEntity):
         except (ValueError, ServiceValidationError):
             value = None
         if value is None:
-            value = (self.coordinator.get_by_id(self.climate_zone_id) or {}).get("setPoint") if self.kind == "temperature" else 60
+            value = (
+                (self.coordinator.get_by_id(self.climate_zone_id) or {}).get("setPoint")
+                if self.kind == "temperature"
+                else 60
+            )
         self._set_draft(value)
 
     def _set_draft(self, value):

@@ -70,7 +70,9 @@ def test_timed_temperature_bindings():
     cards = generate_dashboard(source, bindings)["views"][2]["sections"][0]["cards"]
     controls = next(card for card in cards if card.get("title") == "Temporary temperature")
     assert [row["entity"] for row in controls["entities"]] == [
-        bindings["TEMPORARY_TEMPERATURE"], bindings["TEMPORARY_DURATION"], bindings["TEMPORARY_START"]
+        bindings["TEMPORARY_TEMPERATURE"],
+        bindings["TEMPORARY_DURATION"],
+        bindings["TEMPORARY_START"],
     ]
     bindings["TEMPORARY_START"] = "number.example_wrong"
     with pytest.raises(ValueError, match="Invalid domain.*TEMPORARY_START"):
