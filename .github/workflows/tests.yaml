@@ -1,5 +1,8 @@
 name: Home Assistant tests
-# Use real HA 2026.10.1 registries/entities and mocked cloud HTTP.
+# Exercise the baseline and latest verified plugin pins with mocked cloud HTTP.
+# Native-temperature contract tests additionally exercise HA 2026.11's interface.
+# A full 2026.11 job requires an available compatible test-plugin pin; do not
+# force-install HA over a conflicting plugin dependency and claim compatibility.
 # No household credentials or device commands are needed.
 on:
   push:
@@ -12,11 +15,17 @@ permissions:
 jobs:
   pytest:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        test_plugin: ["0.13.372", "0.13.375"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
           cache: pip
-      - run: python -m pip install -r requirements_test.txt
+      - run: python -m pip install "pytest-homeassistant-custom-component==$TEST_PLUGIN" ruff==0.17.1
+        env:
+          TEST_PLUGIN: ${{ matrix.test_plugin }}
       - run: pytest -q --timeout=60

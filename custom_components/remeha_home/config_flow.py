@@ -1,5 +1,8 @@
 """Config flow for Remeha Home."""
 
+import base64
+import binascii
+import json
 import logging
 from typing import Any
 
@@ -16,11 +19,27 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 
+# Account identity guard adapted from Hugo 57f96bb; decoding is not JWT
+# signature verification. OAuth remains responsible for authentication.
+def _account_id(token: dict) -> str | None:
+    """Return the id of the Remeha account the token belongs to, if it has one.
+
+    The access token is a JWT; its subject is the id of the account.
+    """
+    try:
+        payload = token["access_token"].split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+    except (KeyError, IndexError, AttributeError, binascii.Error, ValueError):
+        return None
+    if not isinstance(claims, dict):
+        return None
+    return claims.get("sub")
+
+
 class RemehaHomeLoginFlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):
     """Config flow to handle RemehaHome authentication."""
 
     DOMAIN = DOMAIN
-    CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
 
     def __init__(self):
         """Create a Remeha Home login flow."""
@@ -34,7 +53,6 @@ class RemehaHomeLoginFlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):
 
     async def async_step_reauth(self, user_input=None):
         """Perform reauth upon an API authentication error."""
-        _LOGGER.debug("reauth %s", user_input)
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(self, user_input=None):
@@ -50,6 +68,8 @@ class RemehaHomeLoginFlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):
     async def async_step_user(self, user_input=None):
         """Handle a flow start."""
         await self.async_set_unique_id(DOMAIN)
+        if self.source != config_entries.SOURCE_REAUTH:
+            self._abort_if_unique_id_configured()
 
         # Create a new session with a cookie jar that does not quote cookies
         # This is necessary to avoid issues with the Remeha Home authentication flow
@@ -95,10 +115,14 @@ class RemehaHomeLoginFlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):
 
     async def async_oauth_create_entry(self, data: dict) -> dict:
         """Create an oauth config entry or update existing entry for reauth."""
-        existing_entry = await self.async_set_unique_id(DOMAIN)
-        if existing_entry:
-            self.hass.config_entries.async_update_entry(existing_entry, data=data)
-            await self.hass.config_entries.async_reload(existing_entry.entry_id)
-            return self.async_abort(reason="reauth_successful")
+        # Re-authenticate only the requesting entry, never replace an account
+        # during an ordinary duplicate setup. No entity or entry IDs migrate.
+        if self.source == config_entries.SOURCE_REAUTH:
+            entry = self._get_reauth_entry()
+            old_account = _account_id(entry.data.get("token", {}))
+            new_account = _account_id(data["token"])
+            if old_account and new_account and old_account != new_account:
+                return self.async_abort(reason="wrong_account")
+            return self.async_update_reload_and_abort(entry, data=data)
 
         return self.async_create_entry(title=self.external_data["email"], data=data)

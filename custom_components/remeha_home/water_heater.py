@@ -76,7 +76,12 @@ class RemehaHomeWaterHeater(CoordinatorEntity, WaterHeaterEntity):
     _attr_supported_features = (
         WaterHeaterEntityFeature.TARGET_TEMPERATURE | WaterHeaterEntityFeature.OPERATION_MODE
     )
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    # Adapted from Hugo a2bc341: HA 2026.11 uses native units; 2026.10
+    # retains the legacy accessors. Values stay in Celsius in both versions.
+    if hasattr(WaterHeaterEntity, "native_temperature_unit"):
+        _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
+    else:
+        _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_translation_key = "remeha_home_dhw"
     _attr_has_entity_name = True
     _attr_name = None
@@ -123,8 +128,7 @@ class RemehaHomeWaterHeater(CoordinatorEntity, WaterHeaterEntity):
             modes.append(STATE_HIGH_DEMAND)
         return modes
 
-    @property
-    def target_temperature(self) -> float | None:
+    def _active_setpoint(self) -> float | None:
         """Return the target temperature based on the active setpoint."""
         setpoint_type = self._current_setpoint_type()
         if setpoint_type == "comfort":
@@ -133,10 +137,17 @@ class RemehaHomeWaterHeater(CoordinatorEntity, WaterHeaterEntity):
             return self._data.get("reducedSetpoint")
         return self._data.get("targetSetpoint")
 
-    @property
-    def current_temperature(self) -> float | None:
+    def _water_temperature(self) -> float | None:
         """Return the current DHW temperature."""
         return self._data.get("dhwTemperature")
+
+    # Select accessors by HA capability rather than a guessed release number.
+    if hasattr(WaterHeaterEntity, "native_temperature_unit"):
+        native_target_temperature = property(_active_setpoint)
+        native_current_temperature = property(_water_temperature)
+    else:
+        target_temperature = property(_active_setpoint)
+        current_temperature = property(_water_temperature)
 
     @property
     def min_temp(self) -> float | None:

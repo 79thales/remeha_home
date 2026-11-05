@@ -56,9 +56,37 @@ APPLIANCE_CONSUMPTION_DEFAULT_DATA = {
 
 
 def get_producers(consumption: dict) -> list[dict]:
-    """Return the producers (heat sources) in the consumption data of an appliance."""
+    """Return valid, unambiguous producers without changing legacy identifiers.
+
+    Adapted from Hugo 76421ea/2de00a3: hybrids can share instance IDs. Until a
+    registry-aware migration is approved, suppress every colliding legacy ID
+    rather than assign a gas measurement to an electric entity (or vice versa).
+    Existing sensors become unknown via _update_producers; no ID is renamed,
+    and a later unambiguous response restores the original measurement.
+    """
+    if not isinstance(consumption, dict):
+        return []
     producer_stats = consumption.get("producerPerformanceStatistics")
-    return (producer_stats or {}).get("producers") or []
+    if not isinstance(producer_stats, dict):
+        return []
+    producers = producer_stats.get("producers")
+    if not isinstance(producers, list):
+        return []
+    valid = []
+    for producer in producers:
+        if not isinstance(producer, dict):
+            continue
+        instance = producer.get("instanceWithinDevice")
+        if not ((type(instance) is int) or (isinstance(instance, str) and instance.isdecimal())):
+            continue
+        if not all(
+            isinstance(producer.get(key), str) and producer[key].strip()
+            for key in ("producerType", "energyType")
+        ):
+            continue
+        valid.append(producer)
+    counts = Counter(str(producer["instanceWithinDevice"]) for producer in valid)
+    return [producer for producer in valid if counts[str(producer["instanceWithinDevice"])] == 1]
 
 
 def get_producer_id(appliance_id: str, producer: dict) -> str:
@@ -107,7 +135,9 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
             # handled by the data update coordinator.
             async with asyncio.timeout(30):
                 data = await self.api.async_get_dashboard()
-                _LOGGER.debug("Requested dashboard information: %s", data)
+                _LOGGER.debug(
+                    "Dashboard refreshed (%s appliances)", len(data.get("appliances", []))
+                )
         except ClientResponseError as err:
             # Raising ConfigEntryAuthFailed will cancel future updates
             # and start a config flow with SOURCE_REAUTH (async_step_reauth)
@@ -129,11 +159,9 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
                 self.technical_info[
                     appliance_id
                 ] = await self.api.async_get_appliance_technical_information(appliance_id)
-                _LOGGER.debug(
-                    "Requested technical information for appliance %s: %s",
-                    appliance_id,
-                    self.technical_info[appliance_id],
-                )
+                # Hugo 01f308b: report endpoint health without serials, names,
+                # account IDs or complete household response payloads.
+                _LOGGER.debug("Technical information refreshed")
 
             # Only update appliance usage data every 15 minutes
             if (appliance_id not in self.appliance_last_consumption_data_update) or (
@@ -144,11 +172,7 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
                     consumption_data = await self.api.async_get_consumption_data_for_today(
                         appliance_id
                     )
-                    _LOGGER.debug(
-                        "Requested consumption data for appliance %s: %s",
-                        appliance_id,
-                        consumption_data,
-                    )
+                    _LOGGER.debug("Consumption information refreshed")
 
                     # Nula je měření jen tehdy, pokud ji API skutečně vrátí.
                     # Prázdná odpověď, chybějící pole ani nový den nejsou nula.
@@ -345,7 +369,14 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
             value = consumption.get(key)
             if type(value) not in (int, float) or not isfinite(value):
                 consumption[key] = None
-        for producer in get_producers(consumption):
+        # Normalize raw measurement units even when a placeholder cannot yet
+        # register as a device. Registration filtering must never leave raw
+        # gas kWh masquerading as converted volume in the returned payload.
+        stats = consumption.get("producerPerformanceStatistics")
+        producers = stats.get("producers") if isinstance(stats, dict) else []
+        for producer in producers if isinstance(producers, list) else []:
+            if not isinstance(producer, dict):
+                continue
             for key in PRODUCER_STATS:
                 value = producer.get(key)
                 if type(value) not in (int, float) or not isfinite(value):

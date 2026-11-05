@@ -23,3 +23,5 @@ private/
 *-private.json
 *-private.yaml
 *-private.yml
+# Local read-only audit evidence may contain household entity mappings.
+.audit-private/

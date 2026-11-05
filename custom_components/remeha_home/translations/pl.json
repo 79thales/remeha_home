@@ -1,7 +1,10 @@
 {
     "config": {
         "abort": {
-            "failed_to_authenticate": "Nie udało się uwierzytelnić"
+            "failed_to_authenticate": "Nie udało się uwierzytelnić",
+            "wrong_account": "Zaloguj się na konto Remeha Home, które zostało wcześniej skonfigurowane. Aby użyć innego konta, usuń integrację i dodaj ją ponownie.",
+            "already_configured": "To konto Remeha Home jest już skonfigurowane",
+            "reauth_successful": "Ponowne uwierzytelnienie powiodło się"
         },
         "error": {
             "failed_to_authenticate": "Nieprawidłowy adres e-mail lub hasło"

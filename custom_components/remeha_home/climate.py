@@ -142,7 +142,12 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
         | ClimateEntityFeature.TURN_OFF
         | ClimateEntityFeature.TURN_ON
     )
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    # Adapted from Hugo a2bc341: HA 2026.11 uses native units; 2026.10
+    # retains the legacy accessors. Values stay in Celsius in both versions.
+    if hasattr(ClimateEntity, "native_temperature_unit"):
+        _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
+    else:
+        _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_precision = PRECISION_HALVES
     _attr_has_entity_name = True
     _attr_name = None
@@ -185,17 +190,23 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
         appliance_data = self._get_appliance_data()
         return appliance_data.get("applianceType", "Boiler") if appliance_data else "Boiler"
 
-    @property
-    def current_temperature(self) -> float | None:
+    def _room_temperature(self) -> float | None:
         """Return the current temperature."""
         return self._data["roomTemperature"]
 
-    @property
-    def target_temperature(self) -> float | None:
+    def _setpoint(self) -> float | None:
         """Return the target temperature."""
         if self.hvac_mode == HVACMode.OFF:
             return None
         return self._data["setPoint"]
+
+    # Select accessors by HA capability rather than a guessed release number.
+    if hasattr(ClimateEntity, "native_temperature_unit"):
+        native_current_temperature = property(_room_temperature)
+        native_target_temperature = property(_setpoint)
+    else:
+        current_temperature = property(_room_temperature)
+        target_temperature = property(_setpoint)
 
     @property
     def min_temp(self) -> float:
