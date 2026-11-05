@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.2 — 2026-11-05
+
+- Adapt the native temperature interface used by Home Assistant 2026.11 while retaining the legacy interface on 2026.10.
+- Prevent an ordinary duplicate login from replacing the configured account; reject a different known account during reauthentication.
+- Remove raw API payloads and reauthentication input from debug logs.
+- Ignore incomplete or colliding producer records without renaming existing entities or mixing gas and electric measurements.
+- Preserve timed overrides, export safeguards, manual OFF, clock programs, upstream diagnostics and existing services.
+- Keep prices and cost calculations out of the dashboard templates and generator; retain power and calendar energy displays and the current control-first composition.
+- Add account, privacy, temperature-interface and hybrid-producer regressions and a two-version CI matrix.
+- Keep this series a prerelease: export-overlay behavior remains experimental. Python runtime changes require a Home Assistant restart after installation.
+
 ## 0.5.1 — 2026-10-29
 
 - Add draft-only duration presets from 30 minutes to 48 hours to both anonymous dashboard templates.
