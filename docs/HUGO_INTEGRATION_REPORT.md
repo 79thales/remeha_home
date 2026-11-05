@@ -65,6 +65,15 @@ modified. Read-only cost queries and private source snapshots are ignored under
 
 ## Executed checks and limitations
 
+- Exact review source `889e817` exported with `git archive` into an isolated
+  local checkout: **104 passed in 6.58 s**. This excludes all pre-existing
+  uncommitted cost/template work. Subsequent report-only edits do not change
+  that tested executable source.
+- The same isolated source passed **Ruff lint**, **Ruff format** (29 files),
+  and a local installer build with matching manifest/tag `v0.5.1`. The archive
+  contains **27 files**, retains all protected modules/templates/services,
+  includes no private profiles and excludes the uncommitted cost draft. This
+  is only package validation: no tag/release was created or published.
 - Full current-worktree HA regression: **125 passed in 6.08 s**, including
   pre-existing cost-draft tests. Python **3.14.2**, real HA **2026.10.2**,
   pytest **9.0.3**, test plugin **0.13.373**, Windows local harness.
@@ -79,8 +88,8 @@ modified. Read-only cost queries and private source snapshots are ignored under
   production settings and authentication were not touched. Windows POSIX-only
   harness operations raise rather than pretending to succeed; loopback sockets
   are permitted for asyncio, external cloud I/O remains mocked.
-- Ruff lint, Ruff format and `git diff --check` were run; final results recorded
-  below after validation of the exact review snapshot.
+- `git diff --check` passed. Full output and private measurement evidence are
+  saved locally in `.audit-private/review-validation.json` and related files.
 - Full HA **2026.11.0** runtime tests: **not executed**. The configured package
   index could not provide that wheel; currently discoverable [plugin 0.13.375](https://pypi.org/project/pytest-homeassistant-custom-component/0.13.375/)
   pins 2026.10.4. Both native/legacy property contracts are tested, but this is
