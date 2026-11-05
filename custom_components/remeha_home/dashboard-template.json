@@ -3,13 +3,14 @@
     "purpose": "Generic English Remeha heating overview with a linked Details subview.",
     "bindings": "Symbolic entity roles only. Real entity IDs, room names, addresses and local automations belong in a private bindings file or private template.",
     "power": "W; negative readings are displayed as zero, missing or older-than-180-second readings are unavailable.",
-    "energy": "Původní kalendářní statistic karty change v kWh a kontrola živého příkonu ve W se zachovávají beze změny.",
+    "energy": "Calendar statistics show changes in import energy counters in kWh; live power remains in W.",
     "side_effects": "Generation is offline; controls write only when used. No history, automations or other views are changed.",
     "customization": "Use --template for a private main/detail composition and --insert-after for an optional existing view anchor.",
-    "layout": "Nahoře vytápění a dočasná teplota, pod nimi TUV a elektřina; na mobilu sekce pod sebou.",
-    "temporary": "Teplota v °C a doba v minutách jsou návrhy. Předvolba mění pouze minuty; teprve Spustit posílá původní povel. Ukončení po potvrzení žádá aktuální časový program. Bez nových časovačů a automatizací.",
-    "unknown": "Původní neznámé, čekající a zastaralé stavy se nezaměňují za potvrzený úspěch ani za nulu.",
-    "details": "Všech 12 délek a úplná původní diagnostika včetně doplňků živého přehledu jsou v propojeném detailu."
+    "layout": "Heating and temporary-temperature controls come first, followed by hot water and electricity; sections stack on mobile.",
+    "temporary": "Temperature in degrees Celsius and duration in minutes are drafts. Presets change only draft minutes; Start sends the existing command. Confirmed Stop requests the current schedule. No new timers or automations are created.",
+    "unknown": "Unknown, pending and stale states are never treated as confirmed success or as zero.",
+    "details": "All 12 duration presets and complete diagnostics remain in the linked Details subview.",
+    "automation_controls": "Private extension templates must contain only current local automation controls and instructions. Retire obsolete rows in both linked views. The public template contains no instance-specific automations."
   },
   "views": [
     {

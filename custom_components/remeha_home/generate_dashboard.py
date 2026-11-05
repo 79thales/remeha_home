@@ -64,6 +64,10 @@ def generate_dashboard(
     existing titles and navigation. New main views are appended by default or
     inserted after an explicitly named existing view; new Details follows main.
     Repeated generation updates the two target views in place without duplicates.
+    Each target view is replaced by its current template composition, so retired
+    automation controls and instructions removed from a private template do not
+    survive from an older dashboard. Update both private main/Details templates
+    when retiring local controls; unrelated views are preserved without cleanup.
     """
     if not isinstance(source, dict) or not isinstance(bindings, dict):
         raise ValueError("Source and bindings must be objects")

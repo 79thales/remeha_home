@@ -200,6 +200,39 @@ def test_private_template_and_explicit_anchor():
         generate_dashboard(source, {}, template, insert_after="missing")
 
 
+def test_regeneration_removes_retired_private_controls_from_both_views():
+    """Replace obsolete rows/instructions without reviving them from source."""
+    retired = {"entity": "automation.example_retired", "name": "Retired control"}
+    current = {"entity": "automation.example_current", "name": "Current control"}
+    source = {
+        "views": [
+            {"path": "unrelated", "cards": [{"type": "markdown", "content": "Keep"}]},
+            {"path": "private-main", "cards": [{"type": "entities", "entities": [retired]}]},
+            {
+                "path": "private-details",
+                "subview": True,
+                "cards": [{"type": "entities", "entities": [retired]}],
+            },
+        ]
+    }
+    template = {
+        "views": [
+            {"path": "private-main", "cards": [{"type": "entities", "entities": [current]}]},
+            {
+                "path": "private-details",
+                "subview": True,
+                "cards": [{"type": "entities", "entities": [current]}],
+            },
+        ]
+    }
+    before = deepcopy(source)
+    result = generate_dashboard(source, {}, template)
+    assert "example_retired" not in json.dumps(result)
+    assert result["views"][0] == before["views"][0]
+    assert source == before
+    assert generate_dashboard(result, {}, template) == result
+
+
 def test_public_templates_and_examples_are_synthetic():
     """Keep JSON/YAML equivalent and require symbolic roles, not concrete entities."""
     text = TEMPLATE.read_text(encoding="utf-8")
