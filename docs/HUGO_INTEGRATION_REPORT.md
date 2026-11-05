@@ -142,3 +142,10 @@ Before removal, the published audit snapshot `944b3d3` passed GitHub Actions:
 0.13.375 (**2.04 s**). Code checks, HACS and hassfest completed successfully.
 The configured HACS license check remains explicitly excluded; it is not a
 passed license validation. Follow-up branch validation is recorded after push.
+
+The price-removal source `654eda0` subsequently passed the same remote matrix:
+**105 tests** with plugin 0.13.372 (**1.58 s**) and **105 tests** with plugin
+0.13.375 (**2.14 s**), plus Code checks and the Validate workflow. A local
+27-file installer smoke test also confirmed the absence of price code/roles and
+the presence of all protected control modules. Only this report was edited
+after those results; no executable source was changed.
