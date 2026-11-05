@@ -2,7 +2,8 @@
 
 Date: 2026-11-05. Branch: `feature/hugo-selective-audit-20261105`.
 Source snapshot and all decisions: [HUGO_FORK_COMPARISON.md](HUGO_FORK_COMPARISON.md).
-Cost investigation: [HEATING_COST_REVIEW.md](HEATING_COST_REVIEW.md).
+Pricing was subsequently withdrawn at the user's explicit request; see the
+authorized removal follow-up at the end of this report.
 
 ## Implemented adaptations
 
@@ -59,8 +60,8 @@ and existing config-entry/entity IDs were not changed. Generator/templates and
 cost work were already dirty at task start and were preserved **outside the
 new task commit**: README, generator, both templates, example bindings,
 test_generate_dashboard, untracked heating_costs.py/test_heating_costs.py.
-No live HA configuration, dashboard, automation, credentials or statistics was
-modified. Read-only cost queries and private source snapshots are ignored under
+During the initial comparison no live HA configuration, dashboard, automation,
+credentials or statistics was modified. Read-only cost queries and private source snapshots are ignored under
 `.audit-private/`; they are not release content.
 
 ## Executed checks and limitations
@@ -108,6 +109,36 @@ modified. Read-only cost queries and private source snapshots are ignored under
 Review the narrow changes first, run Linux HACS/hassfest and current HA runtime
 tests, then verify multi-device identifiers in a non-operating fixture. A later
 deployment should check OFF, clock programs, timed expiry and export coexistence
-without enabling any new automatic heating. Review the cost-display proposal
-separately; it needs a documented backfill/estimation policy and historical tariff
-basis, not a guessed replacement annual total.
+without enabling any new automatic heating. Pricing has been retired by the
+subsequent user request below; no price backfill or estimation is planned.
+
+## Authorized follow-up: remove prices entirely
+
+The user subsequently requested adding the safe adaptations to the fork; the
+review branch was published without changing main or creating a PR/release.
+The user then explicitly withdrew pricing. The live Remeha main/detail price
+cards, current monetary rate, standalone command_line cost sensor, calculation
+script, private configuration and calculation archive were removed after backup.
+The command_line reload preserved the other seven registered entities; no HA
+restart or heating command was needed. Source meter history and the separate
+tariff integration remain intact. Backups are private local recovery material.
+
+Public/private templates and the matching generator now exclude prices while
+preserving the current heating controls, detail views and W/kWh readings. The
+pre-existing control-first layout is retained. The uncommitted cost calculator
+and its retired tests are no longer part of the working tree. The detailed
+price investigation was removed from the current public tree; private evidence
+and the local Git history retain the original audit. No financial backfill was
+invented and no external tariff settings were changed.
+
+Validation after removal: **105 local HA tests passed in 6.64 s**; the live
+private generator roundtrip exactly reproduces all 45 dashboard views, the cost
+entity is absent, and both original kWh meters remain present. The live YAML
+check passed and saved comments were verified. Heating automations and control
+modules were not edited during removal.
+
+Before removal, the published audit snapshot `944b3d3` passed GitHub Actions:
+**104 tests** with plugin 0.13.372 (**1.23 s**) and **104 tests** with plugin
+0.13.375 (**2.04 s**). Code checks, HACS and hassfest completed successfully.
+The configured HACS license check remains explicitly excluded; it is not a
+passed license validation. Follow-up branch validation is recorded after push.

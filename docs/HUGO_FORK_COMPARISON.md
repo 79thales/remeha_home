@@ -92,6 +92,12 @@ No holiday/energy service, producer-ID migration or new heating automation is
 enabled by this branch. Existing dashboard/cost work found dirty at task start
 is preserved separately and is not attributed to Hugo.
 
+Subsequent user decision: pricing was explicitly withdrawn. Its active local
+sensor and dashboard/calculator files were removed after backup; the current
+generator excludes prices and preserves the existing control-first layout and
+energy measurements. See the integration report's removal follow-up. The
+comparison matrix above describes the fetched pre-removal snapshot.
+
 
 ## Appendix: Target-only
 

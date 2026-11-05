@@ -10,6 +10,11 @@ IDs, names, room layouts, local automations, and instance-specific navigation
 belong in private files outside the repository. A custom template keeps those
 extensions available without publishing them or hard-coding them in this module.
 
+Heating and temporary-temperature controls are placed first, followed by hot
+water and energy. Start/stop controls share a layout; all durations and existing
+diagnostics remain in Details. Confirmed Stop requests the current schedule;
+cloud acceptance is not proof of device execution. Generation sends no command.
+
 Duration presets bind to the same zone's duration number and set draft minutes
 only; starting an override remains a separate explicit action. Power is measured
 in W; negative values are clamped only for display. Missing or
@@ -28,8 +33,8 @@ from typing import Any
 
 TOKEN = re.compile(r"@@([A-Z0-9_]+)@@")
 ENTITY_ID = re.compile(r"[a-z_]+\.[a-z0-9_]+")
-# These controls are created by the integration per climate zone. Reject an
-# accidentally swapped binding before producing a dashboard with a broken button.
+# Validate control domains before generating the dashboard.
+# Prices are deliberately excluded; only W and calendar kWh are displayed.
 TIMED_CONTROL_DOMAINS = {
     "TEMPORARY_TEMPERATURE": "number",
     "TEMPORARY_DURATION": "number",

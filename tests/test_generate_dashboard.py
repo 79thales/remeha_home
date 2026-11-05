@@ -64,27 +64,76 @@ def test_duplicate_view_rejected():
         generate_dashboard(source, bindings)
 
 
-def test_timed_temperature_bindings():
-    """Controls remain configurable and a swapped button is rejected offline."""
+def test_prices_are_excluded_without_removing_energy_or_controls():
+    """Retired price roles must not return when regenerating either view."""
     source, bindings = fixture_data()
-    cards = generate_dashboard(source, bindings)["views"][2]["sections"][0]["cards"]
-    controls = next(card for card in cards if card.get("title") == "Temporary temperature")
+    result = generate_dashboard(source, bindings)
+    text = json.dumps(result)
+    assert "HEATING_COSTS" not in bindings and "ELECTRICITY_PRICE" not in bindings
+    assert "remeha_heating_costs" not in text and "remeha_heating_rate" not in text
+    assert "CZK" not in text and "Kč" not in text
+    assert bindings["ENERGY_HP"] in text and bindings["ENERGY_BACKUP"] in text
+    assert bindings["TEMPORARY_START"] in text and bindings["CLIMATE"] in text
+
+
+def test_timed_temperature_bindings():
+    """Ovladače používají správné role i po rozdělení do samostatné sekce."""
+    source, bindings = fixture_data()
+    main = generate_dashboard(source, bindings)["views"][2]
+    cards = [card for section in main["sections"] for card in section["cards"]]
+    controls = next(
+        card
+        for card in cards
+        if card.get("type") == "entities"
+        and any(
+            row.get("entity") == bindings["TEMPORARY_TEMPERATURE"]
+            for row in card.get("entities", [])
+        )
+    )
     assert [row["entity"] for row in controls["entities"]] == [
         bindings["TEMPORARY_TEMPERATURE"],
         bindings["TEMPORARY_DURATION"],
-        bindings["TEMPORARY_START"],
     ]
+    actions = [
+        button["tap_action"]
+        for card in cards
+        if card.get("type") == "grid"
+        for button in card.get("cards", [])
+        if button.get("tap_action", {}).get("perform_action")
+        in ("button.press", "climate.set_hvac_mode")
+    ]
+    start = next(action for action in actions if action["perform_action"] == "button.press")
+    end = next(action for action in actions if action["perform_action"] == "climate.set_hvac_mode")
+    assert start["target"]["entity_id"] == bindings["TEMPORARY_START"]
+    assert end["target"]["entity_id"] == bindings["CLIMATE"]
+    assert end["data"] == {"hvac_mode": "auto"} and end["confirmation"]["text"]
     bindings["TEMPORARY_START"] = "number.example_wrong"
     with pytest.raises(ValueError, match="Invalid domain.*TEMPORARY_START"):
         generate_dashboard(source, bindings)
 
 
 def test_duration_presets_only_set_draft_minutes():
-    """Each named choice sets the correct duration and never starts heating."""
+    """Všech 12 délek zůstává dostupných; rychlé volby pouze mění návrh minut."""
     source, bindings = fixture_data()
-    cards = generate_dashboard(source, bindings)["views"][2]["sections"][0]["cards"]
-    grid = next(card for card in cards if card.get("type") == "grid")
-    buttons = {card["name"]: card["tap_action"] for card in grid["cards"]}
+    generated = generate_dashboard(source, bindings)
+    actions = []
+
+    def collect(value):
+        if isinstance(value, list):
+            for item in value:
+                collect(item)
+        elif isinstance(value, dict):
+            action = value.get("tap_action", {})
+            if (
+                action.get("perform_action") == "number.set_value"
+                and action.get("target", {}).get("entity_id") == bindings["TEMPORARY_DURATION"]
+            ):
+                actions.append((value["name"], action))
+            for item in value.values():
+                collect(item)
+
+    collect(generated)
+    buttons = dict(actions)
     assert {name: action["data"]["value"] for name, action in buttons.items()} == {
         "30 min": 30,
         "1 h": 60,
@@ -99,11 +148,24 @@ def test_duration_presets_only_set_draft_minutes():
         "24 h": 1440,
         "48 h": 2880,
     }
-    assert all(action["perform_action"] == "number.set_value" for action in buttons.values())
-    assert all(
-        action["target"]["entity_id"] == bindings["TEMPORARY_DURATION"]
-        for action in buttons.values()
+    assert all(action["perform_action"] == "number.set_value" for _, action in actions)
+    main = generated["views"][2]
+    temporary = main["sections"][1]
+    preset_grid = next(
+        card
+        for card in temporary["cards"]
+        if card.get("type") == "grid"
+        and all(
+            button.get("tap_action", {}).get("perform_action") == "number.set_value"
+            for button in card.get("cards", [])
+        )
     )
+    assert [button["tap_action"]["data"]["value"] for button in preset_grid["cards"]] == [
+        60,
+        120,
+        240,
+        480,
+    ]
 
 
 def test_private_template_and_explicit_anchor():
@@ -145,7 +207,9 @@ def test_public_templates_and_examples_are_synthetic():
     assert yaml.safe_load(TEMPLATE.with_suffix(".yaml").read_text(encoding="utf-8")) == template
     assert not re.search(
         r"\b(?:sensor|climate|number|water_heater|switch|automation|binary_sensor|input_boolean|button|update)\.[a-z0-9_]+",
-        text.replace('"number.set_value"', '"__DRAFT_NUMBER_SERVICE__"'),
+        text.replace('"number.set_value"', '"__DRAFT_NUMBER_SERVICE__"')
+        .replace('"button.press"', '"__START_BUTTON_SERVICE__"')
+        .replace('"climate.set_hvac_mode"', '"__RETURN_SCHEDULE_SERVICE__"'),
     )
     _, bindings = fixture_data()
     assert set(re.findall(r"@@([A-Z0-9_]+)@@", text)) == set(bindings)
