@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.10 — Preserve temporary override confirmation across restart
+
+- Persist the pending command for each zone before sending a timed temperature override.
+- Clear the record after a matching device report or a fresh report of a known non-override mode after expiry. Loading the record never sends a heating command.
+
 ## v0.5.9 — Use native Remeha dashboard bindings
 
 - Use the shared timed override service for all dashboard temperature and duration presets. Retire the duplicate override entities and integration-specific GitHub diagnostics.

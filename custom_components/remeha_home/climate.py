@@ -315,30 +315,6 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
         """Forget the saved baseline without sending a heating command."""
         await discard_export_record(self)
 
-    def _handle_coordinator_update(self) -> None:
-        """Clear the in-memory pending signal only on a confirmed override.
-
-        A stale schedule response or a failed command cannot prove rejection;
-        pending remains until confirmation or integration reload. The latter
-        never resends the command. An external override may also confirm the
-        mode, but its origin is not identifiable from the cloud data.
-        """
-        pending = getattr(self.coordinator, "temporary_pending", {})
-        expected = pending.get(self.climate_zone_id)
-        zone = self._data or {}
-        reported = zone.get("temporaryOverride") or {}
-        reported_end = reported.get("endTime")
-        if (
-            self.coordinator.last_update_success
-            and expected
-            and zone.get("zoneMode") == "TemporaryOverride"
-            and zone.get("setPoint") == expected[0]
-            and isinstance(reported_end, str)
-            and dt_util.parse_datetime(reported_end) == dt_util.parse_datetime(expected[1])
-        ):
-            pending.pop(self.climate_zone_id, None)
-        super()._handle_coordinator_update()
-
     @property
     def hvac_modes(self) -> list[HVACMode]:
         """Return the list of available operation modes."""

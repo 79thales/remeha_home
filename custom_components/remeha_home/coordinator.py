@@ -23,6 +23,7 @@ from .api import RemehaHomeAPI
 from .const import DOMAIN
 from .holiday_water import HolidayWaterRestore
 from .producer_ids import ProducerIdResolver, is_valid_producer
+from .temporary import TemporaryOverrideJournal
 from .util import detect_dhw_setpoint_activity
 
 _LOGGER = logging.getLogger(__name__)
@@ -102,8 +103,14 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
         self.appliance_producer_ids: dict[str, set[str]] = {}
         self.heating_curve_data: dict[str, dict] = {}
         self.holiday_water_restore = HolidayWaterRestore(self, entry.entry_id)
+        self.temporary_override_journal = TemporaryOverrideJournal(hass, entry.entry_id)
         self.time_programs = {}
         self.activities_data: dict[str, list] = {}
+
+    @property
+    def temporary_pending(self):
+        """Poskytne čekající povely pro kontroly jednotlivých zón."""
+        return self.temporary_override_journal.records
 
     async def _async_update_data(self):
         """Fetch data from API endpoint.
@@ -111,6 +118,7 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
         This is the place to pre-process the data to lookup tables
         so entities can quickly look up their data.
         """
+        read_started = dt_util.utcnow()
         try:
             # Note: asyncio.TimeoutError and aiohttp.ClientError are already
             # handled by the data update coordinator.
@@ -283,6 +291,8 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
 
             self._update_producers(appliance_id, get_producers(appliance["consumptionData"]))
             await self.holiday_water_restore.observe(appliance)
+        # Vyhodnotit až odpověď API, nikoli optimistické stavy entit po povelu.
+        await self.temporary_override_journal.async_observe(data["appliances"], read_started)
         return data
 
     def _update_producers(self, appliance_id: str, producers: list[dict]) -> None:

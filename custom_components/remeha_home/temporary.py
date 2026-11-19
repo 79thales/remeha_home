@@ -6,13 +6,108 @@ particular appliance. A later command from any client is left to the device;
 HA never replays an old command or attempts to infer who changed the zone.
 """
 
-from datetime import timedelta
+import asyncio
+import json
+from datetime import datetime, timedelta
+from pathlib import Path
 
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.util import dt as dt_util
+from homeassistant.util.file import write_utf8_file_atomic
 
+from .const import DOMAIN
 from .export_override import invalidate_local_export
 from .util import serialized_command, validate_value
+
+
+class TemporaryOverrideJournal:
+    """Uchovává nepotvrzené povely jednotlivých zón přes restart HA."""
+
+    def __init__(self, hass, entry_id):
+        self.hass = hass
+        self.path = Path(hass.config.path(".storage", f"{DOMAIN}.{entry_id}.temporary_pending"))
+        self.records: dict[str, tuple[float, str]] = {}
+        # Zápisy různých zón nesmějí přepsat záznam druhé zóny.
+        self._lock = asyncio.Lock()
+
+    def _read(self):
+        try:
+            records = json.loads(self.path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return {}
+        # Poškozený záznam má zastavit inicializaci. Prázdný záznam by
+        # automatizaci nepravdivě oznámil, že žádný povel nečeká.
+        if not isinstance(records, dict):
+            raise ValueError("Invalid temporary override journal")
+        parsed = {}
+        for zone_id, record in records.items():
+            if (
+                not isinstance(record, list)
+                or len(record) != 2
+                or type(record[0]) not in (int, float)
+                or not isinstance(record[1], str)
+                or (end := dt_util.parse_datetime(record[1])) is None
+                or end.tzinfo is None
+            ):
+                raise ValueError("Invalid temporary override record")
+            parsed[zone_id] = (record[0], record[1])
+        return parsed
+
+    async def async_load(self):
+        """Před prvním čtením zařízení obnoví pouze záznam, bez povelu."""
+        self.records = await self.hass.async_add_executor_job(self._read)
+
+    async def _save(self, records):
+        # Atomický zápis s fsync hlásí chybu volajícímu. Při selhání ukládání
+        # služba skončí před síťovým povelem a platný záznam zůstane zachován.
+        await self.hass.async_add_executor_job(
+            write_utf8_file_atomic, str(self.path), json.dumps(records), True
+        )
+        self.records = records
+
+    async def async_mark_pending(self, zone_id, temperature, end_time):
+        """Zapíše očekávanou teplotu v °C a čas konce v UTC před odesláním."""
+        async with self._lock:
+            await self._save({**self.records, zone_id: (temperature, end_time)})
+
+    async def async_observe(self, appliances, read_started: datetime):
+        """Vyhodnotí skutečnou odpověď cloudu, bez jakéhokoli zápisu do topení."""
+        if not self.records:
+            return
+        async with self._lock:
+            records = self.records.copy()
+            for appliance in appliances:
+                for zone in appliance.get("climateZones") or []:
+                    zone_id = zone.get("climateZoneId")
+                    if zone_id not in records:
+                        continue
+                    temperature, expected_end = records[zone_id]
+                    mode = zone.get("zoneMode")
+                    override = zone.get("temporaryOverride")
+                    end_text = override.get("endTime") if isinstance(override, dict) else None
+                    try:
+                        reported_end = (
+                            dt_util.parse_datetime(end_text) if isinstance(end_text, str) else None
+                        )
+                    except ValueError:
+                        reported_end = None
+                    end = datetime.fromisoformat(expected_end)
+                    confirmed = (
+                        mode == "TemporaryOverride"
+                        and zone.get("setPoint") == temperature
+                        and reported_end == end
+                    )
+                    # Opožděný program před koncem neprokazuje zánik povelu.
+                    # Po termínu smí čerstvé čtení známého režimu záznam uvolnit.
+                    expired = read_started >= end and mode in (
+                        "Scheduling",
+                        "Manual",
+                        "FrostProtection",
+                    )
+                    if confirmed or expired:
+                        del records[zone_id]
+            if records != self.records:
+                await self._save(records)
 
 
 @serialized_command("climate_zone_id")
@@ -54,9 +149,10 @@ async def start_override(entity, temperature, duration_minutes):
     # Signal uncertainty before the network request so observers can suspend
     # conflicting automatic writes immediately. An HTTP success is not proof
     # that the device has applied the request. Lost responses stay uncertain.
-    pending = coordinator.__dict__.setdefault("temporary_pending", {})
     end_text = end.isoformat().replace("+00:00", "Z")
-    pending[entity.climate_zone_id] = (temperature, end_text)
+    await coordinator.temporary_override_journal.async_mark_pending(
+        entity.climate_zone_id, temperature, end_text
+    )
     coordinator.async_update_listeners()
     try:
         await entity.api.async_set_temporary_override(entity.climate_zone_id, temperature, end_text)
