@@ -375,3 +375,58 @@ class RemehaHeatingSchematicCard extends HTMLElement {
 }
 
 if (!customElements.get(CARD_TAG)) customElements.define(CARD_TAG, RemehaHeatingSchematicCard);
+
+// Samostatná karta používá stejný modul jako schéma. Data bere z atributů
+// zóny a dovolené; datum v editoru nemění zařízení, povel odešle až potvrzení.
+class RemehaCalendarCard extends HTMLElement {
+  setConfig(config) {
+    this.config = config;
+    this.innerHTML = '<ha-card><div style="padding:16px"><h3></h3><details><summary></summary><div class="week"></div></details><p class="holiday"></p><label>Od <input type="date"></label> <label>Do <input type="date"></label><p><button>Naplánovat dovolenou</button> <button>Zrušit dovolenou</button></p><div role="status"></div></div></ha-card>';
+    this.querySelector('h3').textContent = 'Časové programy a dovolená';
+    this.querySelector('summary').textContent = 'Týdenní rozpis vytápění a TUV';
+    this.querySelectorAll('button').forEach((button, i) => {
+      button.onclick = () => this.send(i === 1);
+    });
+  }
+  set hass(value) {
+    this.ha = value;
+    if (!this.config) return;
+    const week = this.querySelector('.week');
+    const states = value.states;
+    const programs = [states[this.config.heating], states[this.config.dhw]];
+    if (!this.previous || programs.some((p,i) => p !== this.previous[i])) {
+      week.replaceChildren();
+      const days = {monday:'Po', tuesday:'Út', wednesday:'St', thursday:'Čt', friday:'Pá', saturday:'So', sunday:'Ne'};
+      for (const [index, program] of programs.entries()) {
+        const heading = document.createElement('h4');
+        heading.textContent = (index ? 'TUV' : 'Vytápění') + ' · ' + (program?.attributes.program ?? '—');
+        week.append(heading);
+        const schedule = program?.attributes.schedule;
+        for (const [day, label] of Object.entries(days)) {
+          const row = document.createElement('p');
+          row.textContent = schedule ? label + ': ' + ((schedule[day] || []).map(p => [p.time, p.mode, p.setpoint == null ? '' : p.setpoint + ' °C'].filter(Boolean).join(' ')).join(' · ') || 'bez přepnutí') : 'Rozpis není dostupný';
+          week.append(row);
+          if (!schedule) break;
+        }
+      }
+      this.previous = programs;
+    }
+    const holiday = states[this.config.holiday];
+    this.querySelector('.holiday').textContent = 'Dovolená · ' + ({on:'aktivní',off:'neaktivní'}[holiday?.state] ?? 'nedostupná') + (holiday?.attributes.start_date ? ' · ' + holiday.attributes.start_date + ' – ' + holiday.attributes.end_date : '');
+    this.querySelectorAll('button').forEach(b => { b.disabled = this.busy || !['on','off'].includes(holiday?.state); });
+  }
+  async send(cancel) {
+    const [start, end] = Array.from(this.querySelectorAll('input'), i => i.value);
+    const status = this.querySelector('[role=status]');
+    if (!cancel && (!start || !end || end <= start)) { status.textContent = 'Zadejte začátek a pozdější konec dovolené.'; return; }
+    if (this.busy || !window.confirm(cancel ? 'Zrušit dovolenou zařízení?' : 'Nastavit dovolenou od ' + start + ' do ' + end + '?')) return;
+    this.busy = true;
+    this.hass = this.ha;
+    try {
+      await this.ha.callService('remeha_home', cancel ? 'cancel_holiday_mode' : 'set_holiday_mode', cancel ? {} : {start_date:start,end_date:end}, {entity_id:this.config.holiday});
+      status.textContent = 'Požadavek odeslán. Aktuální stav určí další čtení zařízení.';
+    } catch (error) { status.textContent = error.message || 'Odeslání se nezdařilo.'; }
+    finally { this.busy = false; this.hass = this.ha; }
+  }
+}
+if (!customElements.get('remeha-calendar-card')) customElements.define('remeha-calendar-card', RemehaCalendarCard);

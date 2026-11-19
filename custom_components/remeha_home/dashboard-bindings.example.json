@@ -59,5 +59,7 @@
   "UPDATE": "update.example_update",
   "UPSTREAM_CHECK": "button.example_upstream_check",
   "UPSTREAM_COMMUNITY": "sensor.example_upstream_community",
-  "UPSTREAM_ORIGINAL": "sensor.example_upstream_original"
+  "UPSTREAM_ORIGINAL": "sensor.example_upstream_original",
+  "HEATING_CLOCK": "sensor.example_heating_clock_program",
+  "DHW_CLOCK": "sensor.example_dhw_clock_program"
 }

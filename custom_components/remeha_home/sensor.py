@@ -29,6 +29,7 @@ from .coordinator import (
     RemehaHomeUpdateCoordinator,
     get_producers,
 )
+from .schedule import week
 from .upstream import SOURCES
 
 _LOGGER = logging.getLogger(__name__)
@@ -130,6 +131,7 @@ async def async_setup_entry(
 class RemehaHomeSensor(CoordinatorEntity, SensorEntity):
     """Representation of a Sensor."""
 
+    _unrecorded_attributes = frozenset({"schedule"})
     _attr_has_entity_name = True
 
     def __init__(
@@ -192,7 +194,15 @@ class RemehaHomeSensor(CoordinatorEntity, SensorEntity):
         """Zpřístupnit číslo programu bez dalšího požadavku na API."""
         if self.entity_description.key in CLOCK_PROGRAM_KEYS:
             value = self.native_value
-            return {"program": int(value[-1]) if value is not None else None}
+            program = int(value[-1]) if value is not None else None
+            dhw = self.entity_description.key == "activeDwhTimeProgramNumber"
+            raw = self.coordinator.time_programs.get((dhw, program), {}).get(self.item_id)
+            return {
+                "program": program,
+                "schedule": week(
+                    raw, self._data, self.coordinator.get_activities(self.item_id), dhw
+                ),
+            }
         return super().extra_state_attributes
 
     @property

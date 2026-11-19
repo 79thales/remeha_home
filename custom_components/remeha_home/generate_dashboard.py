@@ -230,6 +230,20 @@ def generate_dashboard(
         return TOKEN.sub(resolve, value)
 
     # Ochranu přidáváme až po dosazení rolí, aby fungovaly i vlastní šablony.
+    # Starší profily mohou postrádat ověřené vazby na hodinové senzory.
+    # V takovém případě vynechat samotnou volitelnou kartu bez odhadu entity_id.
+    raw_views = deepcopy(raw_views)
+    for view in raw_views:
+        for section in view.get("sections", []):
+            cards = section.get("cards", [])
+            section["cards"] = [
+                c
+                for c in cards
+                if c.get("type") != "custom:remeha-calendar-card"
+                or all(
+                    role in bindings for role in ("HEATING_CLOCK", "DHW_CLOCK", "HOLIDAY_STATUS")
+                )
+            ]
     views = confirm_controls(substitute(raw_views))
     # Build the whole result in memory before returning it. Each target view is
     # replaced in place; only new views require insertion or the optional anchor.

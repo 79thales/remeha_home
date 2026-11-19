@@ -48,8 +48,15 @@
                 "rows": "auto"
               },
               "thermometers": [
-                { "entity": "@@ROOM@@", "name": "Room sensor", "reference": true },
-                { "entity": "@@OUTDOOR@@", "name": "Outdoor sensor" }
+                {
+                  "entity": "@@ROOM@@",
+                  "name": "Room sensor",
+                  "reference": true
+                },
+                {
+                  "entity": "@@OUTDOOR@@",
+                  "name": "Outdoor sensor"
+                }
               ]
             }
           ]
@@ -531,6 +538,17 @@
               "grid_options": {
                 "columns": 6
               }
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "cards": [
+            {
+              "type": "custom:remeha-calendar-card",
+              "heating": "@@HEATING_CLOCK@@",
+              "dhw": "@@DHW_CLOCK@@",
+              "holiday": "@@HOLIDAY_STATUS@@"
             }
           ]
         }

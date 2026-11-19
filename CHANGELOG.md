@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.5 — Clock schedules and appliance holidays
+
+- Heating and DHW clock sensors expose the active weekly schedule. Holiday services schedule or cancel whole days on the selected appliance.
+- The bundled dashboard shows both weekly programs and a date form with explicit confirmation. Holiday state comes from the appliance.
+
 ## v0.5.4 — Phase 1 entity registry alignment with Hugo v0.10.2
 
 - Migrate the holiday sensor in place, retain existing dashboard and automation references, and recognize zone-level preheat and DHW optimization when reported.

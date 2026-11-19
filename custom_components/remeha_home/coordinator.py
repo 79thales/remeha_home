@@ -100,6 +100,7 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
         self.appliance_consumption_data_date: dict[str, date] = {}
         self.appliance_producer_ids: dict[str, set[str]] = {}
         self.heating_curve_data: dict[str, dict] = {}
+        self.time_programs = {}
         self.activities_data: dict[str, list] = {}
 
     async def _async_update_data(self):
@@ -246,6 +247,12 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
                     list,
                 )
 
+                await self._refresh_program(
+                    climate_zone_id,
+                    climate_zone.get("activeHeatingClimateTimeProgramNumber"),
+                    False,
+                    now,
+                )
                 self.device_info[climate_zone_id] = DeviceInfo(
                     identifiers={(DOMAIN, climate_zone_id)},
                     name=climate_zone["name"],
@@ -261,6 +268,9 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
                 hot_water_zone["dhwCurrentActivity"] = self._derive_dhw_activity(hot_water_zone)
 
                 self.items[hot_water_zone_id] = hot_water_zone
+                await self._refresh_program(
+                    hot_water_zone_id, hot_water_zone.get("activeDwhTimeProgramNumber"), True, now
+                )
                 self.device_info[hot_water_zone_id] = DeviceInfo(
                     identifiers={(DOMAIN, hot_water_zone_id)},
                     name=hot_water_zone["name"],
@@ -329,6 +339,18 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
         known_ids |= current_ids
         if changed and self.on_producer_ids_changed:
             self.on_producer_ids_changed()
+
+    async def _refresh_program(self, zone, program, dhw, now):
+        """Oddělená cache pro každou zónu a číslo programu; výpadek neblokuje topení."""
+        if type(program) is int and 1 <= program <= 3:
+            cache = self.time_programs.setdefault((dhw, program), {})
+
+            async def fetch(zone_id):
+                return await self.api.async_get_time_program(zone_id, program, dhw)
+
+            await self._async_refresh_optional(
+                zone, f"program-{dhw}-{program}", cache, fetch, now, dict
+            )
 
     async def _async_refresh_optional(self, zone_id, key, cache, fetch, now, expected):
         """Načíst volitelný endpoint s 10s timeoutem a 15min intervalem.

@@ -4,17 +4,23 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from datetime import date
 
+import voluptuous as vol
 from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import entity_platform
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .const import (
     APPLIANCE_BINARY_SENSOR_TYPES,
@@ -23,6 +29,7 @@ from .const import (
     HOT_WATER_ZONE_BINARY_SENSOR_TYPES,
 )
 from .coordinator import RemehaHomeUpdateCoordinator
+from .util import serialized_command
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,6 +40,13 @@ async def async_setup_entry(
     """Set up the Remeha Home sensor entities from a config entry."""
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
 
+    platform = entity_platform.async_get_current_platform()
+    platform.async_register_entity_service(
+        "set_holiday_mode",
+        {vol.Required("start_date"): cv.date, vol.Required("end_date"): cv.date},
+        "async_set_holiday_mode",
+    )
+    platform.async_register_entity_service("cancel_holiday_mode", {}, "async_cancel_holiday_mode")
     entities = []
     for appliance in coordinator.data["appliances"]:
         # Hugo používá ID celého rozvrhu. Přejmenování unique_id ve stejném
@@ -165,6 +179,38 @@ class RemehaHomeBinarySensor(CoordinatorEntity, BinarySensorEntity):
         ):
             return None
         return self.transform_func(data)
+
+    @property
+    def extra_state_attributes(self):
+        if self.entity_description.key != "holidaySchedule.active":
+            return super().extra_state_attributes
+        schedule = (self._data or {}).get("holidaySchedule") or {}
+
+        def calendar_day(key):
+            raw = schedule.get(key)
+            try:
+                day = date.fromisoformat(raw[:10])
+            except (TypeError, ValueError):
+                return None
+            return day.isoformat() if day.year > 1 else None
+
+        return {"start_date": calendar_day("startTime"), "end_date": calendar_day("endTime")}
+
+    async def async_set_holiday_mode(self, start_date, end_date):
+        if end_date <= start_date or end_date <= dt_util.now().date():
+            raise ServiceValidationError("Holiday end must follow start and be in the future")
+        await self._write_holiday(start_date, end_date)
+
+    async def async_cancel_holiday_mode(self):
+        await self._write_holiday(None, None)
+
+    @serialized_command("item_id")
+    async def _write_holiday(self, start, end):
+        """Jeden explicitní povel na zařízení. Stav potvrzuje pravidelné čtení cloudu."""
+        if self.entity_description.key != "holidaySchedule.active" or not self.available:
+            raise ServiceValidationError("Select an available Remeha Holiday Mode sensor")
+        await self.coordinator.api.async_write_holiday(self.item_id, start, end)
+        await self.coordinator.async_request_refresh()
 
     @property
     def device_info(self) -> DeviceInfo:

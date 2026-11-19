@@ -137,6 +137,30 @@ class RemehaHomeAPI:
         )
         response.raise_for_status()
 
+    async def async_get_time_program(self, zone_id, program, dhw):
+        """Číst pouze aktivní program 1–3 pro daný druh zóny."""
+        path = (
+            f"/hot-water-zones/{zone_id}/time-programs"
+            if dhw
+            else f"/climate-zones/{zone_id}/time-programs/heating"
+        )
+        response = await self._async_api_request("GET", f"{path}/{program}")
+        response.raise_for_status()
+        return await response.json()
+
+    async def async_write_holiday(self, appliance_id, start, end):
+        """API přijímá celé dny UTC, zrušení označuje dvojice sentinelů roku 1."""
+        payload = {
+            "holidayModeStartTime": f"{start.isoformat()}T00:00:00Z"
+            if start
+            else "0001-01-01T00:00:00Z",
+            "holidayModeEndTime": f"{end.isoformat()}T00:00:00Z" if end else "0001-01-01T00:00:01Z",
+        }
+        response = await self._async_api_request(
+            "POST", f"/appliances/{appliance_id}/holidayschedule", json=payload
+        )
+        response.raise_for_status()
+
     async def async_set_fireplace_mode(self, climate_zone_id: str, enabled: bool):
         """Set fireplace mode for a climate zone."""
         response = await self._async_api_request(

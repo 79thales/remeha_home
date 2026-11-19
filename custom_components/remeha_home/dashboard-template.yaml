@@ -398,6 +398,12 @@ views:
       unit: kWh
       grid_options:
         columns: 6
+  - type: grid
+    cards:
+    - type: custom:remeha-calendar-card
+      heating: '@@HEATING_CLOCK@@'
+      dhw: '@@DHW_CLOCK@@'
+      holiday: '@@HOLIDAY_STATUS@@'
   dense_section_placement: false
 - title: Remeha Heating — Details
   path: remeha-heating-details

@@ -122,7 +122,8 @@ async def test_holiday_identity_migration_preserves_entity_id(hass, ready):
     )
     for _ in range(2):
         entities = []
-        await binary_sensor.async_setup_entry(hass, entry, entities.extend)
+        with patch.object(binary_sensor.entity_platform, "async_get_current_platform"):
+            await binary_sensor.async_setup_entry(hass, entry, entities.extend)
         assert sum(entity.unique_id == prefix for entity in entities) == 1
         assert registry.async_get(original.entity_id).unique_id == prefix
         assert registry.async_get(original.entity_id).id == original.id

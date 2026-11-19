@@ -103,3 +103,28 @@ discard_export_override_record:
     entity:
       integration: remeha_home
       domain: climate
+set_holiday_mode:
+  name: Schedule holiday
+  description: Apply to the selected appliance holiday sensor. Dates refer to whole
+    calendar days.
+  target:
+    entity:
+      integration: remeha_home
+      domain: binary_sensor
+  fields:
+    start_date:
+      required: true
+      selector:
+        date: {}
+    end_date:
+      required: true
+      selector:
+        date: {}
+cancel_holiday_mode:
+  name: Cancel holiday
+  description: Apply to the selected appliance holiday sensor. Dates refer to whole
+    calendar days.
+  target:
+    entity:
+      integration: remeha_home
+      domain: binary_sensor
