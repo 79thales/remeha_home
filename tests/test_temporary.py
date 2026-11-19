@@ -9,19 +9,6 @@ from homeassistant.exceptions import ServiceValidationError
 from custom_components.remeha_home.temporary import TemporaryOverrideJournal, start_override
 
 
-@pytest.fixture
-def journal(tmp_path):
-    """Použije skutečný soubor a nahradí jen plánování práce v HA."""
-    hass = Mock()
-    hass.config.path.side_effect = lambda *parts: str(tmp_path / parts[-1])
-
-    async def run(function, *args):
-        return function(*args)
-
-    hass.async_add_executor_job = AsyncMock(side_effect=run)
-    return TemporaryOverrideJournal(hass, "test-entry")
-
-
 def draft(zone, journal):
     """Build a per-zone command target without a real device or account."""
     coordinator = Mock()
@@ -38,7 +25,8 @@ def draft(zone, journal):
 
 
 @pytest.mark.asyncio
-async def test_timed_override_sends_utc_and_retains_pending(journal):
+async def test_timed_override_sends_utc_and_retains_pending(temporary_journal):
+    journal = temporary_journal
     target = draft(
         {
             "zoneMode": "Scheduling",
@@ -72,15 +60,16 @@ async def test_timed_override_sends_utc_and_retains_pending(journal):
         },
     ],
 )
-async def test_unconfirmed_capability_or_manual_mode_never_writes(zone, journal):
-    target = draft(zone, journal)
+async def test_unconfirmed_capability_or_manual_mode_never_writes(zone, temporary_journal):
+    target = draft(zone, temporary_journal)
     with pytest.raises(ServiceValidationError):
         await start_override(target, 21, 60)
     target.api.async_set_temporary_override.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_unknown_cloud_result_stays_pending_without_retry(journal):
+async def test_unknown_cloud_result_stays_pending_without_retry(temporary_journal):
+    journal = temporary_journal
     target = draft(
         {
             "zoneMode": "Scheduling",
@@ -98,8 +87,9 @@ async def test_unknown_cloud_result_stays_pending_without_retry(journal):
 
 
 @pytest.mark.asyncio
-async def test_pending_survives_restart_and_clears_only_on_fresh_evidence(journal):
+async def test_pending_survives_restart_and_clears_only_on_fresh_evidence(temporary_journal):
     """Stará odpověď a cizí override nesmějí uvolnit čekající zónu."""
+    journal = temporary_journal
     end = datetime(2026, 1, 1, 2, tzinfo=timezone.utc)
     await journal.async_mark_pending("zone-a", 21.5, end.isoformat())
     await journal.async_mark_pending("zone-b", 20, end.isoformat())
@@ -140,8 +130,9 @@ async def test_pending_survives_restart_and_clears_only_on_fresh_evidence(journa
 
 
 @pytest.mark.asyncio
-async def test_storage_failure_prevents_cloud_command(journal):
+async def test_storage_failure_prevents_cloud_command(temporary_journal):
     """Selhání zápisu na disk nesmí zanechat odeslaný nepokrytý povel."""
+    journal = temporary_journal
     target = draft(
         {
             "zoneMode": "Scheduling",

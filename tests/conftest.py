@@ -1,13 +1,27 @@
 """Syntetická data pro skutečné HA testy; neobsahují data žádné domácnosti."""
 
 from copy import deepcopy
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.remeha_home.api import RemehaHomeAPI
 from custom_components.remeha_home.coordinator import RemehaHomeUpdateCoordinator
+from custom_components.remeha_home.temporary import TemporaryOverrideJournal
+
+
+@pytest.fixture
+def temporary_journal(tmp_path):
+    """Použije skutečný soubor a nahradí pouze plánování práce v HA."""
+    hass = Mock()
+    hass.config.path.side_effect = lambda *parts: str(tmp_path / parts[-1])
+
+    async def run(function, *args):
+        return function(*args)
+
+    hass.async_add_executor_job = AsyncMock(side_effect=run)
+    return TemporaryOverrideJournal(hass, "test-entry")
 
 
 @pytest.fixture

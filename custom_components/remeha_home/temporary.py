@@ -57,13 +57,16 @@ class TemporaryOverrideJournal:
         """Před prvním čtením zařízení obnoví pouze záznam, bez povelu."""
         self.records = await self.hass.async_add_executor_job(self._read)
 
+    def _write(self, records):
+        self.path.parent.mkdir(exist_ok=True)
+        write_utf8_file_atomic(str(self.path), json.dumps(records), True)
+
     async def _save(self, records):
         # Atomický zápis s fsync hlásí chybu volajícímu. Při selhání ukládání
         # služba skončí před síťovým povelem a platný záznam zůstane zachován.
-        await self.hass.async_add_executor_job(
-            write_utf8_file_atomic, str(self.path), json.dumps(records), True
-        )
-        self.records = records
+        await self.hass.async_add_executor_job(self._write, records)
+        self.records.clear()
+        self.records.update(records)
 
     async def async_mark_pending(self, zone_id, temperature, end_time):
         """Zapíše očekávanou teplotu v °C a čas konce v UTC před odesláním."""

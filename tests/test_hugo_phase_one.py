@@ -84,7 +84,7 @@ async def test_history_service_batches_and_response(hass, api):
     ]
 
 
-async def test_native_seconds_and_pending_guard():
+async def test_native_seconds_and_pending_guard(temporary_journal):
     """90 s se nekrátí na minutu a nejistý povel využívá stávající ochranu."""
     target = draft(
         {
@@ -92,9 +92,9 @@ async def test_native_seconds_and_pending_guard():
             "capabilityTemporaryOverrideEndTime": True,
             "setPointMin": 5,
             "setPointMax": 30,
-        }
+        },
+        temporary_journal,
     )
-    target.coordinator.temporary_pending = {}
     with patch(
         "custom_components.remeha_home.temporary.dt_util.utcnow",
         return_value=datetime(2026, 1, 1, tzinfo=UTC),

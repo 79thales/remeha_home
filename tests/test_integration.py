@@ -275,7 +275,7 @@ async def test_full_platform_setup_has_no_writes_or_via_warning(
 
 
 async def test_timed_controls_register_without_writing_and_unload(
-    hass, api, enable_custom_integrations
+    hass, api, enable_custom_integrations, tmp_path
 ):
     """Ověřit nativní časovaný povel a odstranění nahrazených ovladačů."""
     dashboard = api.async_get_dashboard.side_effect()
@@ -307,6 +307,10 @@ async def test_timed_controls_register_without_writing_and_unload(
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done(wait_background_tasks=True)
+
+    # Zápis se opravdu provede, ale během testu patří do izolované složky.
+    coordinator = hass.data["remeha_home"][entry.entry_id]["coordinator"]
+    coordinator.temporary_override_journal.path = tmp_path / ".storage" / "temporary_pending"
 
     registry = er.async_get(hass)
     zone_id = zone["climateZoneId"]
