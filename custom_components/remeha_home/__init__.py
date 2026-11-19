@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.storage import Store
 
 from .api import RemehaHomeAPI, RemehaHomeOAuth2Implementation
 from .config_flow import RemehaHomeLoginFlowHandler
@@ -14,6 +15,7 @@ from .const import DOMAIN
 from .coordinator import RemehaHomeUpdateCoordinator
 from .energy_history import register_energy_history
 from .export_override import ExportOverrideManager
+from .producer_ids import ProducerIdResolver
 from .upstream import RemehaUpstreamCoordinator
 
 PLATFORMS: list[Platform] = [
@@ -25,6 +27,16 @@ PLATFORMS: list[Platform] = [
     Platform.SWITCH,
     Platform.WATER_HEATER,
 ]
+
+
+def producer_ids_storage_key(entry: ConfigEntry) -> str:
+    """Return the storage key for persistent heat producer identities."""
+    return f"{DOMAIN}.{entry.entry_id}.producer_ids"
+
+
+def legacy_producer_ids_storage_key(entry: ConfigEntry) -> str:
+    """Return the key used by early versions of the collision fix."""
+    return f"{DOMAIN}_producer_ids_{entry.entry_id}"
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -51,6 +63,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     # Vlastník registru musí být znám už při prvním načtení dat.
     coordinator = RemehaHomeUpdateCoordinator(hass, api, entry)
 
+    producer_store = Store(hass, 1, producer_ids_storage_key(entry))
+    saved_producer_ids = await producer_store.async_load()
+    if saved_producer_ids is None:
+        # Don't discard assignments from an already-installed preview of this PR.
+        legacy_store = Store(hass, 1, legacy_producer_ids_storage_key(entry))
+        saved_producer_ids = await legacy_store.async_load()
+        if saved_producer_ids is not None:
+            producer_store.async_delay_save(lambda: dict(saved_producer_ids), 1)
+    coordinator.producer_id_resolver = ProducerIdResolver(saved_producer_ids)
+
+    @callback
+    def save_producer_ids() -> None:
+        """Persist assigned producer IDs without affecting climate updates."""
+        producer_store.async_delay_save(
+            lambda: dict(coordinator.producer_id_resolver.assignments), 1
+        )
+
+    coordinator.on_producer_ids_changed = save_producer_ids
     await coordinator.async_config_entry_first_refresh()
 
     # Load only the journal; setup must never replay a pending heating command.

@@ -170,6 +170,11 @@ GAS_PRODUCER_SENSOR_TYPES = [
 
 CLIMATE_ZONE_SENSOR_TYPES = [
     SensorEntityDescription(
+        key="temporaryOverride.endTime",
+        name="Override End",
+        device_class=SensorDeviceClass.TIMESTAMP,
+    ),
+    SensorEntityDescription(
         key="activeHeatingClimateTimeProgramNumber",
         name="Clock Program",
         device_class=SensorDeviceClass.ENUM,
@@ -207,6 +212,7 @@ CLIMATE_ZONE_SENSOR_TYPES = [
 ]
 
 HOT_WATER_ZONE_SENSOR_TYPES = [
+    SensorEntityDescription(key="nextSwitchActivity", name="Next Mode"),
     SensorEntityDescription(
         key="activeDwhTimeProgramNumber",
         name="Clock Program",

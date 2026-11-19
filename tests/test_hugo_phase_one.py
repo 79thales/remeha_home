@@ -105,3 +105,50 @@ async def test_native_seconds_and_pending_guard():
     target.api.async_set_temporary_override.assert_awaited_once_with(
         "synthetic-zone", 21.5, "2026-01-01T00:01:30Z"
     )
+
+
+async def test_holiday_identity_migration_preserves_entity_id(hass, ready):
+    """Po aktualizaci a opakovaném načtení drží HA původní řádek registru."""
+    from homeassistant.helpers import entity_registry as er
+
+    from custom_components.remeha_home import binary_sensor
+
+    coordinator, entry = ready
+    hass.data["remeha_home"] = {entry.entry_id: {"coordinator": coordinator}}
+    registry = er.async_get(hass)
+    prefix = "remeha_home_appliance-1_holidaySchedule"
+    original = registry.async_get_or_create(
+        "binary_sensor", "remeha_home", prefix + ".active", config_entry=entry
+    )
+    for _ in range(2):
+        entities = []
+        await binary_sensor.async_setup_entry(hass, entry, entities.extend)
+        assert sum(entity.unique_id == prefix for entity in entities) == 1
+        assert registry.async_get(original.entity_id).unique_id == prefix
+        assert registry.async_get(original.entity_id).id == original.id
+
+
+async def test_preheat_preserves_other_zones(ready):
+    """Nové čtení těsně před POST určí hodnotu druhé zóny, neúplné čtení blokuje zápis."""
+    from unittest.mock import AsyncMock
+
+    from homeassistant.exceptions import ServiceValidationError
+
+    from custom_components.remeha_home.switch import PreHeatSwitch
+
+    coordinator, _ = ready
+    api = AsyncMock()
+    zones = [
+        {"climateZoneId": "a", "preHeat": {"enabled": False}},
+        {"climateZoneId": "b", "preHeat": {"enabled": True}},
+    ]
+    api.async_get_dashboard.return_value = {
+        "appliances": [{"applianceId": "one", "capabilityPreHeat": True, "climateZones": zones}]
+    }
+    switch = PreHeatSwitch(api, coordinator, "one", "a")
+    await switch.async_turn_on()
+    api.async_set_pre_heat.assert_awaited_once_with("one", {"a": True, "b": True})
+    zones[1].pop("preHeat")
+    with pytest.raises(ServiceValidationError):
+        await switch.async_turn_on()
+    assert api.async_set_pre_heat.await_count == 1

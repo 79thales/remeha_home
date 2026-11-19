@@ -15,11 +15,13 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import RemehaHomeAPI
 from .const import DOMAIN
+from .producer_ids import ProducerIdResolver, is_valid_producer
 from .util import detect_dhw_setpoint_activity
 
 _LOGGER = logging.getLogger(__name__)
@@ -56,14 +58,7 @@ APPLIANCE_CONSUMPTION_DEFAULT_DATA = {
 
 
 def get_producers(consumption: dict) -> list[dict]:
-    """Return valid, unambiguous producers without changing legacy identifiers.
-
-    Adapted from Hugo 76421ea/2de00a3: hybrids can share instance IDs. Until a
-    registry-aware migration is approved, suppress every colliding legacy ID
-    rather than assign a gas measurement to an electric entity (or vice versa).
-    Existing sensors become unknown via _update_producers; no ID is renamed,
-    and a later unambiguous response restores the original measurement.
-    """
+    """Vyber platné záznamy. Kolize řeší společný perzistentní resolver."""
     if not isinstance(consumption, dict):
         return []
     producer_stats = consumption.get("producerPerformanceStatistics")
@@ -72,26 +67,7 @@ def get_producers(consumption: dict) -> list[dict]:
     producers = producer_stats.get("producers")
     if not isinstance(producers, list):
         return []
-    valid = []
-    for producer in producers:
-        if not isinstance(producer, dict):
-            continue
-        instance = producer.get("instanceWithinDevice")
-        if not ((type(instance) is int) or (isinstance(instance, str) and instance.isdecimal())):
-            continue
-        if not all(
-            isinstance(producer.get(key), str) and producer[key].strip()
-            for key in ("producerType", "energyType")
-        ):
-            continue
-        valid.append(producer)
-    counts = Counter(str(producer["instanceWithinDevice"]) for producer in valid)
-    return [producer for producer in valid if counts[str(producer["instanceWithinDevice"])] == 1]
-
-
-def get_producer_id(appliance_id: str, producer: dict) -> str:
-    """Return the item id of a producer."""
-    return f"{appliance_id}_{producer['instanceWithinDevice']}"
+    return [item for item in producers if is_valid_producer(item)]
 
 
 class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
@@ -108,6 +84,8 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
         )
         # Jeden zámek na zónu serializuje zápisy TUV a číselných parametrů.
         # Zámek nepřežívá restart a nevytváří žádné automatické řídicí povely.
+        self.producer_id_resolver = ProducerIdResolver()
+        self.on_producer_ids_changed = None
         self.command_locks: dict[str, asyncio.Lock] = {}
         self.appliance_device_ids: dict[str, str] = {}
         self.optional_data_updated = {}
@@ -296,11 +274,32 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
 
     def _update_producers(self, appliance_id: str, producers: list[dict]) -> None:
         """Register the producers (heat sources) of an appliance as devices."""
-        type_counts = Counter(producer.get("producerType") for producer in producers)
+        # A hybrid may initially report only its boiler. If an electric entity
+        # already owns that instance's legacy ID, don't reassign it to gas.
+        existing_electric_legacy_ids = set()
+        if self.items[appliance_id].get("applianceType") == "HeatPump":
+            entity_registry = er.async_get(self.hass)
+            for producer in producers:
+                if not is_valid_producer(producer):
+                    continue
+                if producer.get("energyType") != "NaturalGas":
+                    continue
+                legacy = f"{appliance_id}_{producer['instanceWithinDevice']}"
+                if entity_registry.async_get_entity_id(
+                    "sensor", DOMAIN, f"{DOMAIN}_{legacy}_seasonalEfficiency"
+                ):
+                    existing_electric_legacy_ids.add(legacy)
+
+        resolved, changed = self.producer_id_resolver.resolve(
+            appliance_id,
+            producers,
+            appliance_type=self.items[appliance_id].get("applianceType"),
+            existing_electric_legacy_ids=existing_electric_legacy_ids,
+        )
+        type_counts = Counter(producer.get("producerType") for producer, _ in resolved)
         current_ids = set()
 
-        for producer in producers:
-            producer_id = get_producer_id(appliance_id, producer)
+        for producer, producer_id in resolved:
             current_ids.add(producer_id)
             self.items[producer_id] = producer
 
@@ -328,6 +327,8 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
                 **dict.fromkeys([*PRODUCER_STATS, "seasonalEfficiency"], None),
             }
         known_ids |= current_ids
+        if changed and self.on_producer_ids_changed:
+            self.on_producer_ids_changed()
 
     async def _async_refresh_optional(self, zone_id, key, cache, fetch, now, expected):
         """Načíst volitelný endpoint s 10s timeoutem a 15min intervalem.

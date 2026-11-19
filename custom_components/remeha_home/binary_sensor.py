@@ -11,6 +11,7 @@ from homeassistant.components.binary_sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -34,8 +35,33 @@ async def async_setup_entry(
 
     entities = []
     for appliance in coordinator.data["appliances"]:
-        # Read-only appliance diagnostics use the existing parent device identity.
+        # Hugo používá ID celého rozvrhu. Přejmenování unique_id ve stejném
+        # záznamu ponechá entity_id, historii i odkazy karet. Při kolizi se
+        # dvě odlišné identity neslučují.
+        registry = er.async_get(hass)
+        prefix = f"{DOMAIN}_{appliance['applianceId']}_holidaySchedule"
+
+        def migrate(previous, target):
+            old = registry.async_get_entity_id("binary_sensor", DOMAIN, previous)
+            if old and registry.async_get(old).config_entry_id == entry.entry_id:
+                if registry.async_get_entity_id("binary_sensor", DOMAIN, target) is None:
+                    registry.async_update_entity(old, new_unique_id=target)
+
+        migrate(prefix + ".active", prefix)
+        zones = appliance["climateZones"]
+        # Starý snímač byl připojen k zařízení. Přesměrovat jeho vazby
+        # smíme jen tehdy, když existuje právě jedna jednoznačná cílová zóna.
+        preheat_zones = [
+            z for z in zones if isinstance(z.get("preHeat"), dict) and "active" in z["preHeat"]
+        ]
+        if len(zones) == len(preheat_zones) == 1:
+            migrate(
+                f"{DOMAIN}_{appliance['applianceId']}_preHeat.active",
+                f"{DOMAIN}_{zones[0]['climateZoneId']}_preHeat.active",
+            )
         for description, transform in APPLIANCE_BINARY_SENSOR_TYPES:
+            if description.key == "preHeat.active" and preheat_zones:
+                continue
             entities.append(
                 RemehaHomeBinarySensor(
                     coordinator, appliance["applianceId"], description, transform
@@ -43,10 +69,18 @@ async def async_setup_entry(
             )
         for climate_zone in appliance["climateZones"]:
             climate_zone_id = climate_zone["climateZoneId"]
-            for (
-                entity_description,
-                transform_func,
-            ) in CLIMATE_ZONE_BINARY_SENSOR_TYPES:
+            zone_types = list(CLIMATE_ZONE_BINARY_SENSOR_TYPES)
+            if (
+                isinstance(climate_zone.get("preHeat"), dict)
+                and "active" in climate_zone["preHeat"]
+            ):
+                zone_types.append(
+                    (
+                        BinarySensorEntityDescription(key="preHeat.active", name="Pre-heat active"),
+                        bool,
+                    )
+                )
+            for entity_description, transform_func in zone_types:
                 entities.append(
                     RemehaHomeBinarySensor(
                         coordinator,
@@ -58,10 +92,20 @@ async def async_setup_entry(
 
         for hot_water_zone in appliance["hotWaterZones"]:
             hot_water_zone_id = hot_water_zone["hotWaterZoneId"]
-            for (
-                entity_description,
-                transform_func,
-            ) in HOT_WATER_ZONE_BINARY_SENSOR_TYPES:
+            dhw_types = list(HOT_WATER_ZONE_BINARY_SENSOR_TYPES)
+            if (
+                appliance.get("capabilityDhwOptimization")
+                and "optimizationEnabled" in hot_water_zone
+            ):
+                dhw_types.append(
+                    (
+                        BinarySensorEntityDescription(
+                            key="optimizationEnabled", name="Optimization"
+                        ),
+                        bool,
+                    )
+                )
+            for entity_description, transform_func in dhw_types:
                 entities.append(
                     RemehaHomeBinarySensor(
                         coordinator,
@@ -91,7 +135,12 @@ class RemehaHomeBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self.entity_description = entity_description
         self.transform_func = transform_func
         self.item_id = item_id
-        self._attr_unique_id = "_".join([DOMAIN, self.item_id, entity_description.key])
+        identity = (
+            "holidaySchedule"
+            if entity_description.key == "holidaySchedule.active"
+            else entity_description.key
+        )
+        self._attr_unique_id = "_".join([DOMAIN, self.item_id, identity])
 
     @property
     def _data(self):

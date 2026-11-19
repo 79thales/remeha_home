@@ -27,7 +27,6 @@ from .const import (
 )
 from .coordinator import (
     RemehaHomeUpdateCoordinator,
-    get_producer_id,
     get_producers,
 )
 from .upstream import SOURCES
@@ -53,6 +52,22 @@ async def async_setup_entry(
             climate_zone_id = climate_zone["climateZoneId"]
             for entity_description in CLIMATE_ZONE_SENSOR_TYPES:
                 entities.append(RemehaHomeSensor(coordinator, climate_zone_id, entity_description))
+
+            # Hodnota v °C pochází z volitelného endpointu této jediné zóny.
+            if "maxFlowTemperature" in (coordinator.get_heating_curve(climate_zone_id) or {}):
+                entities.append(
+                    RemehaHomeSensor(
+                        coordinator,
+                        climate_zone_id,
+                        SensorEntityDescription(
+                            key="heatingCurve.maxFlowTemperature",
+                            name="Heating Curve Max Flow Temperature",
+                            device_class=SensorDeviceClass.TEMPERATURE,
+                            native_unit_of_measurement="°C",
+                            entity_category=EntityCategory.DIAGNOSTIC,
+                        ),
+                    )
+                )
 
         for hot_water_zone in appliance["hotWaterZones"]:
             hot_water_zone_id = hot_water_zone["hotWaterZoneId"]
@@ -86,8 +101,10 @@ async def async_setup_entry(
         new_entities = []
         for appliance in coordinator.data["appliances"]:
             for producer in get_producers(appliance["consumptionData"]):
-                producer_id = get_producer_id(appliance["applianceId"], producer)
-                if producer_id in known_producer_ids:
+                producer_id = coordinator.producer_id_resolver.get_id(
+                    appliance["applianceId"], producer
+                )
+                if producer_id is None or producer_id in known_producer_ids:
                     continue
                 if producer.get("energyType") == "NaturalGas":
                     entity_descriptions = GAS_PRODUCER_SENSOR_TYPES
@@ -135,6 +152,10 @@ class RemehaHomeSensor(CoordinatorEntity, SensorEntity):
     @property
     def native_value(self):
         """Return the measurement value for this sensor."""
+        if self.entity_description.key == "heatingCurve.maxFlowTemperature":
+            return (self.coordinator.get_heating_curve(self.item_id) or {}).get(
+                "maxFlowTemperature"
+            )
         data = self._data
         for part in self.entity_description.key.split("."):
             # If the key is missing for some reason, don't crash, instead return None
@@ -143,6 +164,8 @@ class RemehaHomeSensor(CoordinatorEntity, SensorEntity):
                 return None
             data = data[part]
         value = data
+        if self.entity_description.key == "nextSwitchActivity" and value == "Reduced":
+            return "Eco"
         if self.entity_description.key in CLOCK_PROGRAM_KEYS:
             # Číslo programu je z posledního pollu příslušné zóny. Výstup
             # používá stejné hodnoty jako Hugo i presety klimatické entity.
@@ -155,7 +178,11 @@ class RemehaHomeSensor(CoordinatorEntity, SensorEntity):
             if parsed is None or parsed.year <= 1:
                 return None
             if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
+                parsed = parsed.replace(
+                    tzinfo=dt_util.UTC
+                    if self.entity_description.key == "temporaryOverride.endTime"
+                    else dt_util.DEFAULT_TIME_ZONE
+                )
             return dt_util.as_utc(parsed)
 
         return value

@@ -127,6 +127,16 @@ class RemehaHomeAPI:
         )
         response.raise_for_status()
 
+    async def async_set_pre_heat(self, appliance_id, values):
+        """Odeslat potvrzené hodnoty předstihu všech zón jediného zařízení."""
+        payload = [
+            {"climateZoneId": zone, "preHeatEnabled": state} for zone, state in values.items()
+        ]
+        response = await self._async_api_request(
+            "POST", f"/appliances/{appliance_id}/preheat", json={"climateZones": payload}
+        )
+        response.raise_for_status()
+
     async def async_set_fireplace_mode(self, climate_zone_id: str, enabled: bool):
         """Set fireplace mode for a climate zone."""
         response = await self._async_api_request(

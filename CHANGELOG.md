@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.5.4 — Phase 1 entity registry alignment with Hugo v0.10.2
+
+- Migrate the holiday sensor in place, retain existing dashboard and automation references, and recognize zone-level preheat and DHW optimization when reported.
+- Use persistent producer identities compatible with Hugo, including hybrid installations that share an instance number. Add the override end, next DHW mode and reported maximum flow temperature.
+- The existing heating and PV control logic remains in the fork during phase one.
+
 ## 0.5.3 — Preparation for merging with Hugo's fork
 
 This prerelease aligns shared interfaces with `hugo-leij/remeha_home` as a first step toward combining the forks. It keeps the existing installation and its entity identities in place while compatibility is verified.

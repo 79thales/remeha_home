@@ -10,6 +10,7 @@ from homeassistant.components.switch import (
     SwitchEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity import DeviceInfo
@@ -37,6 +38,13 @@ async def async_setup_entry(
             climate_zone_id = climate_zone["climateZoneId"]
 
             entities.append(RemehaHomeFireplaceModeSwitch(api, coordinator, climate_zone_id))
+
+            if appliance.get("capabilityPreHeat") and isinstance(
+                (climate_zone.get("preHeat") or {}).get("enabled"), bool
+            ):
+                entities.append(
+                    PreHeatSwitch(api, coordinator, appliance["applianceId"], climate_zone_id)
+                )
 
         for hot_water_zone in appliance["hotWaterZones"]:
             if hot_water_zone.get("capabilityBoostMode") is True:
@@ -201,4 +209,60 @@ class RemehaHomeDhwBoostSwitch(CoordinatorEntity, SwitchEntity):
         await api_call(self.hot_water_zone_id)
         self._data["dhwZoneMode"] = mode
         self.async_write_ha_state()
+        await self.coordinator.async_request_refresh()
+
+
+class PreHeatSwitch(RemehaHomeSwitch):
+    """Předstih topení zóny. Zápis API má rozsah celého zařízení."""
+
+    def __init__(self, api, coordinator, appliance_id, zone_id):
+        super().__init__(
+            api,
+            coordinator,
+            zone_id,
+            SwitchEntityDescription(
+                key="preHeat.enabled",
+                name="Pre-heat",
+                icon="mdi:clock-start",
+                entity_category=EntityCategory.CONFIG,
+            ),
+        )
+        self.appliance_id = appliance_id
+
+    @property
+    def is_on(self):
+        enabled = (self._data.get("preHeat") or {}).get("enabled")
+        return enabled if isinstance(enabled, bool) else None
+
+    async def async_turn_on(self, **kwargs):
+        await self._set_enabled(True)
+
+    async def async_turn_off(self, **kwargs):
+        await self._set_enabled(False)
+
+    @serialized_command("appliance_id")
+    async def _set_enabled(self, enabled):
+        """Před sestavením společného payloadu přečíst všechny zóny.
+
+        Chybějící hodnota jiné zóny brání zápisu. Shodný stav nevyvolá POST.
+        Zámek zařízení chrání společný seznam před souběhem místních ovladačů.
+        """
+        data = await self.api.async_get_dashboard()
+        appliance = next(
+            (a for a in data["appliances"] if a["applianceId"] == self.appliance_id), {}
+        )
+        values = {
+            z["climateZoneId"]: (z.get("preHeat") or {}).get("enabled")
+            for z in appliance.get("climateZones", [])
+        }
+        if (
+            not appliance.get("capabilityPreHeat")
+            or self.climate_zone_id not in values
+            or not all(isinstance(v, bool) for v in values.values())
+        ):
+            raise ServiceValidationError("Pre-heat state unavailable")
+        if values[self.climate_zone_id] == enabled:
+            return
+        values[self.climate_zone_id] = enabled
+        await self.api.async_set_pre_heat(self.appliance_id, values)
         await self.coordinator.async_request_refresh()

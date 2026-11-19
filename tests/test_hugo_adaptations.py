@@ -126,9 +126,10 @@ def test_hybrid_collision_does_not_mix_legacy_statistics(ready):
     c._update_producers("appliance-1", [electric])
     legacy = c.get_by_id("appliance-1_1")
     wrapped = {"producerPerformanceStatistics": {"producers": [gas, electric]}}
-    assert get_producers(wrapped) == []
+    assert len(get_producers(wrapped)) == 2
     c._update_producers("appliance-1", get_producers(wrapped))
-    assert c.get_by_id("appliance-1_1")["energyConsumptionCH"] is None
+    assert c.get_by_id("appliance-1_1")["energyConsumptionCH"] == 5
+    assert c.get_by_id("appliance-1_1_GasBoiler")["energyConsumptionCH"] == 99
     assert legacy["energyConsumptionCH"] == 5
     c._update_producers(
         "appliance-1", get_producers({"producerPerformanceStatistics": {"producers": [electric]}})
