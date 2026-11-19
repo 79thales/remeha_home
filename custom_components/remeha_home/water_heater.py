@@ -260,7 +260,7 @@ class RemehaHomeWaterHeater(CoordinatorEntity, WaterHeaterEntity):
         if not self.available or not target_mode:
             raise ServiceValidationError("Hot water mode is unavailable or unsupported")
 
-        self.coordinator.holiday_water_restore.forget_zone(self.hot_water_zone_id)
+        await self.coordinator.holiday_water_restore.forget_zone(self.hot_water_zone_id)
         if target_mode == "ContinuousComfort":
             await self.api.async_set_dhw_mode_comfort(self.hot_water_zone_id)
         elif target_mode == "Scheduling":

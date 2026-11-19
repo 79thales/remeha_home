@@ -101,7 +101,7 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
         self.appliance_consumption_data_date: dict[str, date] = {}
         self.appliance_producer_ids: dict[str, set[str]] = {}
         self.heating_curve_data: dict[str, dict] = {}
-        self.holiday_water_restore = HolidayWaterRestore(self)
+        self.holiday_water_restore = HolidayWaterRestore(self, entry.entry_id)
         self.time_programs = {}
         self.activities_data: dict[str, list] = {}
 

@@ -81,6 +81,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         )
 
     coordinator.on_producer_ids_changed = save_producer_ids
+    await coordinator.holiday_water_restore.async_load()
     await coordinator.async_config_entry_first_refresh()
 
     # Load only the journal; setup must never replay a pending heating command.

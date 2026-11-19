@@ -216,7 +216,7 @@ class RemehaHomeBinarySensor(CoordinatorEntity, BinarySensorEntity):
             and appliance
             and (appliance.get("holidaySchedule") or {}).get("active") is False
         ):
-            self.coordinator.holiday_water_restore.track(appliance, start, end)
+            await self.coordinator.holiday_water_restore.track(appliance, start, end)
         await self.coordinator.async_request_refresh()
 
     @property

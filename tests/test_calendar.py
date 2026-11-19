@@ -10,6 +10,7 @@ from homeassistant.util import dt as dt_util
 from custom_components.remeha_home.api import RemehaHomeAPI
 from custom_components.remeha_home.binary_sensor import RemehaHomeBinarySensor
 from custom_components.remeha_home.const import APPLIANCE_BINARY_SENSOR_TYPES
+from custom_components.remeha_home.holiday_water import HolidayWaterRestore
 from custom_components.remeha_home.schedule import week
 
 
@@ -73,8 +74,10 @@ async def test_holiday_api_contract():
 
 
 @pytest.mark.parametrize("manual", [False, True])
-async def test_holiday_water_restores_only_observed_off_zone(ready, manual):
-    coordinator, _ = ready
+@pytest.mark.parametrize("restart", [False, True])
+async def test_holiday_water_restores_only_observed_off_zone(ready, manual, restart):
+    """Ověřit obnovu, perzistenci ručního zásahu a ochranu proti druhému povelu."""
+    coordinator, entry = ready
     coordinator.api.async_set_dhw_mode_schedule = AsyncMock()
     coordinator.api.async_set_schedule = AsyncMock()
     recover = coordinator.holiday_water_restore
@@ -92,7 +95,7 @@ async def test_holiday_water_restores_only_observed_off_zone(ready, manual):
         "holidaySchedule": {"active": False},
         "hotWaterZones": [zone, {"hotWaterZoneId": "originally-off", "dhwZoneMode": "Off"}],
     }
-    recover.track(appliance, start, end)
+    await recover.track(appliance, start, end)
     appliance["holidaySchedule"] = {
         "active": True,
         "startTime": start.isoformat(),
@@ -105,10 +108,16 @@ async def test_holiday_water_restores_only_observed_off_zone(ready, manual):
     await recover.observe(appliance)
     coordinator.api.async_set_dhw_mode_schedule.assert_not_awaited()
     if manual:
-        recover.forget_zone("scheduled")
-        recover.forget_zone("heating")
+        await recover.forget_zone("scheduled")
+        await recover.forget_zone("heating")
+    if restart:
+        recover = HolidayWaterRestore(coordinator, entry.entry_id)
+        await recover.async_load()
     appliance["holidaySchedule"]["active"] = False
     await recover.observe(appliance)
+    if restart:
+        recover = HolidayWaterRestore(coordinator, entry.entry_id)
+        await recover.async_load()
     await recover.observe(appliance)
     if manual:
         coordinator.api.async_set_dhw_mode_schedule.assert_not_awaited()

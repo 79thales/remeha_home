@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.5.8 — Preserve holiday recovery through HA restarts
+
+- Store the original schedule and the device-confirmed holiday state before restoring heating and hot water. Explicit Home Assistant changes remain excluded from restoration after a restart.
+
 ## v0.5.7 — Restore the heating schedule after a holiday
 
 - Restore the original heating clock program if an observed holiday leaves the zone in frost protection. Explicit HA overrides take precedence.

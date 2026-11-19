@@ -373,7 +373,7 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
         if self.climate_zone_id in getattr(self.coordinator, "temporary_pending", set()):
             raise ServiceValidationError("A timed override is awaiting cloud confirmation")
         if recovery := getattr(self.coordinator, "holiday_water_restore", None):
-            recovery.forget_zone(self.climate_zone_id)
+            await recovery.forget_zone(self.climate_zone_id)
         await invalidate_local_export(self)
         requested_hvac_mode = kwargs.get(ATTR_HVAC_MODE)
 
@@ -416,7 +416,7 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new operation mode."""
         if recovery := getattr(self.coordinator, "holiday_water_restore", None):
-            recovery.forget_zone(self.climate_zone_id)
+            await recovery.forget_zone(self.climate_zone_id)
         await invalidate_local_export(self)
         if hvac_mode not in self.hvac_modes:
             raise ServiceValidationError("Unsupported HVAC mode")
@@ -454,7 +454,7 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set new preset mode."""
         if recovery := getattr(self.coordinator, "holiday_water_restore", None):
-            recovery.forget_zone(self.climate_zone_id)
+            await recovery.forget_zone(self.climate_zone_id)
         await invalidate_local_export(self)
         _LOGGER.debug("Setting preset mode to %s", preset_mode)
 
