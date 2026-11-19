@@ -21,6 +21,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import RemehaHomeAPI
 from .const import DOMAIN
+from .holiday_water import HolidayWaterRestore
 from .producer_ids import ProducerIdResolver, is_valid_producer
 from .util import detect_dhw_setpoint_activity
 
@@ -100,6 +101,7 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
         self.appliance_consumption_data_date: dict[str, date] = {}
         self.appliance_producer_ids: dict[str, set[str]] = {}
         self.heating_curve_data: dict[str, dict] = {}
+        self.holiday_water_restore = HolidayWaterRestore(self)
         self.time_programs = {}
         self.activities_data: dict[str, list] = {}
 
@@ -280,6 +282,7 @@ class RemehaHomeUpdateCoordinator(DataUpdateCoordinator):
                 )
 
             self._update_producers(appliance_id, get_producers(appliance["consumptionData"]))
+            await self.holiday_water_restore.observe(appliance)
         return data
 
     def _update_producers(self, appliance_id: str, producers: list[dict]) -> None:

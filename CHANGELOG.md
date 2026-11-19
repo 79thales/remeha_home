@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.5.6 — Restore hot water after a holiday
+
+- Restore scheduled DHW after a confirmed holiday left the zone off. Explicit HA changes take precedence. The pending recovery is held in memory and cleared on reload.
+
 ## v0.5.5 — Clock schedules and appliance holidays
 
 - Heating and DHW clock sensors expose the active weekly schedule. Holiday services schedule or cancel whole days on the selected appliance.

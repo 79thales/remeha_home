@@ -70,3 +70,38 @@ async def test_holiday_api_contract():
             "/appliances/one/holidayschedule",
             json=dict(zip(("holidayModeStartTime", "holidayModeEndTime"), expected, strict=True)),
         )
+
+
+@pytest.mark.parametrize("manual", [False, True])
+async def test_holiday_water_restores_only_observed_off_zone(ready, manual):
+    coordinator, _ = ready
+    coordinator.api.async_set_dhw_mode_schedule = AsyncMock()
+    recover = coordinator.holiday_water_restore
+    start = dt_util.now().date()
+    end = start + timedelta(days=1)
+    zone = {"hotWaterZoneId": "scheduled", "dhwZoneMode": "Scheduling"}
+    appliance = {
+        "applianceId": "appliance-1",
+        "holidaySchedule": {"active": False},
+        "hotWaterZones": [zone, {"hotWaterZoneId": "originally-off", "dhwZoneMode": "Off"}],
+    }
+    recover.track(appliance, start, end)
+    appliance["holidaySchedule"] = {
+        "active": True,
+        "startTime": start.isoformat(),
+        "endTime": end.isoformat(),
+    }
+    zone["dhwZoneMode"] = "Off"
+    await recover.observe(appliance)
+    appliance["holidaySchedule"] = {"active": True}
+    await recover.observe(appliance)
+    coordinator.api.async_set_dhw_mode_schedule.assert_not_awaited()
+    if manual:
+        recover.forget_zone("scheduled")
+    appliance["holidaySchedule"]["active"] = False
+    await recover.observe(appliance)
+    await recover.observe(appliance)
+    if manual:
+        coordinator.api.async_set_dhw_mode_schedule.assert_not_awaited()
+    else:
+        coordinator.api.async_set_dhw_mode_schedule.assert_awaited_once_with("scheduled")

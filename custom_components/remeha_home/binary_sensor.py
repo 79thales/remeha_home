@@ -209,7 +209,14 @@ class RemehaHomeBinarySensor(CoordinatorEntity, BinarySensorEntity):
         """Jeden explicitní povel na zařízení. Stav potvrzuje pravidelné čtení cloudu."""
         if self.entity_description.key != "holidaySchedule.active" or not self.available:
             raise ServiceValidationError("Select an available Remeha Holiday Mode sensor")
+        appliance = self._data
         await self.coordinator.api.async_write_holiday(self.item_id, start, end)
+        if (
+            start is not None
+            and appliance
+            and (appliance.get("holidaySchedule") or {}).get("active") is False
+        ):
+            self.coordinator.holiday_water_restore.track(appliance, start, end)
         await self.coordinator.async_request_refresh()
 
     @property
