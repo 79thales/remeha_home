@@ -241,11 +241,6 @@ async def test_full_platform_setup_has_no_writes_or_via_warning(
     entry.add_to_hass(hass)
     with (
         patch("custom_components.remeha_home.RemehaHomeAPI", return_value=api),
-        # I při nedostupném GitHubu musí být hlavní integrace plně načtená.
-        patch(
-            "custom_components.remeha_home.upstream.RemehaUpstreamCoordinator._get_json",
-            new=AsyncMock(side_effect=ClientConnectionError()),
-        ),
         patch(
             "custom_components.remeha_home.config_entry_oauth2_flow.async_get_config_entry_implementation",
             new=AsyncMock(),
@@ -265,12 +260,7 @@ async def test_full_platform_setup_has_no_writes_or_via_warning(
         "switch",
         "water_heater",
         "binary_sensor",
-        "button",
     }
-    assert (
-        hass.data["remeha_home"][entry.entry_id]["upstream"].data["original"]["error"]
-        == "network_error"
-    )
     assert any(
         hass.states.get(item.entity_id).state not in ("unknown", "unavailable")
         for item in entities
@@ -287,12 +277,7 @@ async def test_full_platform_setup_has_no_writes_or_via_warning(
 async def test_timed_controls_register_without_writing_and_unload(
     hass, api, enable_custom_integrations
 ):
-    """Set up real HA platforms with a synthetic capable zone and mocked cloud.
-
-    Setting each local draft must update HA without starting a timed override;
-    the button and entity services must be registered, and unload must remove
-    their live states. No test operation presses a button or contacts a device.
-    """
+    """Ověřit nativní časovaný povel a odstranění nahrazených ovladačů."""
     dashboard = api.async_get_dashboard.side_effect()
     zone = dashboard["appliances"][0]["climateZones"][0]
     zone["capabilityTemporaryOverrideEndTime"] = True
@@ -301,12 +286,19 @@ async def test_timed_controls_register_without_writing_and_unload(
 
     entry = MockConfigEntry(domain="remeha_home", title="Test", data={}, unique_id="timed")
     entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    zone_id = zone["climateZoneId"]
+    legacy = (
+        ("number", "temporary_temperature"),
+        ("number", "temporary_duration"),
+        ("button", "start_temporary_temperature"),
+    )
+    for domain, suffix in legacy:
+        registry.async_get_or_create(
+            domain, "remeha_home", f"remeha_home_{zone_id}_{suffix}", config_entry=entry
+        )
     with (
         patch("custom_components.remeha_home.RemehaHomeAPI", return_value=api),
-        patch(
-            "custom_components.remeha_home.upstream.RemehaUpstreamCoordinator._get_json",
-            new=AsyncMock(side_effect=ClientConnectionError()),
-        ),
         patch(
             "custom_components.remeha_home.config_entry_oauth2_flow.async_get_config_entry_implementation",
             new=AsyncMock(),
@@ -319,18 +311,12 @@ async def test_timed_controls_register_without_writing_and_unload(
     registry = er.async_get(hass)
     zone_id = zone["climateZoneId"]
     climate = registry.async_get_entity_id("climate", "remeha_home", f"remeha_home_{zone_id}")
-    temperature = registry.async_get_entity_id(
-        "number", "remeha_home", f"remeha_home_{zone_id}_temporary_temperature"
-    )
-    duration = registry.async_get_entity_id(
-        "number", "remeha_home", f"remeha_home_{zone_id}_temporary_duration"
-    )
-    button = registry.async_get_entity_id(
-        "button", "remeha_home", f"remeha_home_{zone_id}_start_temporary_temperature"
-    )
-    assert all((climate, temperature, duration, button))
-    for entity_id in (climate, temperature, duration, button):
-        assert hass.states.get(entity_id) is not None
+    assert climate and hass.states.get(climate) is not None
+    for domain, suffix in legacy:
+        assert (
+            registry.async_get_entity_id(domain, "remeha_home", f"remeha_home_{zone_id}_{suffix}")
+            is None
+        )
     for name in (
         "set_temporary_override",
         "start_export_override",
@@ -340,11 +326,6 @@ async def test_timed_controls_register_without_writing_and_unload(
     ):
         assert hass.services.has_service("remeha_home", name)
 
-    for entity_id, value in ((temperature, 22.5), (duration, 90)):
-        await hass.services.async_call(
-            "number", "set_value", {"entity_id": entity_id, "value": value}, blocking=True
-        )
-        assert float(hass.states.get(entity_id).state) == value
     assert not any(call[0].startswith(("async_set_", "async_activate_")) for call in api.mock_calls)
 
     # Ověřit kompatibilní služby přes skutečný registr a směrování HA.
@@ -379,11 +360,8 @@ async def test_timed_controls_register_without_writing_and_unload(
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
-    for entity_id in (climate, temperature, duration, button):
-        # HA may keep registry-backed restored states marked unavailable after
-        # unloading; either absence or that explicit state means no live entity.
-        state = hass.states.get(entity_id)
-        assert state is None or state.state == "unavailable"
+    state = hass.states.get(climate)
+    assert state is None or state.state == "unavailable"
 
 
 def test_schedule_does_not_reuse_previous_activity(ready):

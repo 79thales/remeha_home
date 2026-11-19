@@ -16,9 +16,9 @@ share a layout; all durations and existing
 diagnostics remain in Details. Confirmed Stop requests the current schedule;
 cloud acceptance is not proof of device execution. Generation sends no command.
 
-Duration presets bind to the same zone's duration number and set draft minutes
-only; starting an override remains a separate explicit action. Power is measured
-in W; negative values are clamped only for display. Missing or
+Duration presets edit draft minutes in the override card. The card invokes a
+shared service with the matching climate entity after confirmation. Power is
+measured in W; negative values are clamped only for display. Missing or
 older-than-180-second readings remain unavailable. Calendar energy is in kWh,
 using changes in import counters. Raw measurements, read-only appliance status, and diagnostics are in Details.
 """
@@ -77,6 +77,15 @@ def confirm_controls(value: Any) -> Any:
     if not isinstance(value, dict):
         return value
     if value.get("type") == "custom:confirm-controls-card-v4":
+        return deepcopy(value)
+    if value.get("type") == "custom:remeha-override-card":
+        entity = value.get("entity")
+        if (
+            not isinstance(entity, str)
+            or not ENTITY_ID.fullmatch(entity)
+            or not entity.startswith("climate.")
+        ):
+            raise ValueError("The Remeha override card requires a climate entity")
         return deepcopy(value)
     if value.get("type") == SCHEMATIC_CARD:
         # Schéma je pouze ke čtení. Ověříme rozhraní karty už v návrhu, aby

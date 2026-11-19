@@ -1,23 +1,23 @@
-# Potvrzení chrání posuvníky a přepínače; vyžaduje kartu confirm-controls-card-v4.
-# Kruhový termostat v °C zachovává své původní ovládání.
+# Potvrzení chrání posuvníky a přepínače. Karta dočasné teploty volá společné služby.
 _documentation:
   purpose: Generic English Remeha heating overview with a linked Details subview.
-  bindings: Symbolic entity roles only. Real entity IDs, room names, addresses and local automations belong in a private bindings
-    file or private template.
+  bindings: Symbolic entity roles only. Real entity IDs, room names, addresses and local automations belong in a private
+    bindings file or private template.
   power: W; negative readings are displayed as zero, missing or older-than-180-second readings are unavailable.
   energy: Calendar statistics show changes in import energy counters in kWh; live power remains in W.
   side_effects: Generation is offline; controls write only when used. No history, automations or other views are changed.
-  customization: Use --template for a private main/detail composition and --insert-after for an optional existing view anchor.
-  layout: The system diagram includes compact thermometers, followed by heating, temporary temperature, hot water and electricity.
-    Controls stack on mobile.
+  customization: Use --template for a private main/detail composition and --insert-after for an optional existing view
+    anchor.
+  layout: The system diagram includes compact thermometers, followed by heating, temporary temperature, hot water and
+    electricity. Controls stack on mobile.
   schematic: Requires the bundled remeha-heating-schematic-card.js as a Lovelace module. It reads current HA states and
     animates recognized modes reported by Remeha. The animation represents the active mode, not a measured flow rate.
-  temporary: Temperature in degrees Celsius and duration in minutes are drafts. Presets change only draft minutes; Start sends
-    the existing command. Confirmed Stop requests the current schedule. No new timers or automations are created.
+  temporary: Temperature and preset minutes are local inputs. Confirming Start or Return sends the corresponding shared
+    Remeha/HA service to the climate entity.
   unknown: Unknown, pending and stale states are never treated as confirmed success or as zero.
   details: All 12 duration presets and complete diagnostics remain in the linked Details subview.
-  automation_controls: Private extension templates must contain only current local automation controls and instructions. Retire
-    obsolete rows in both linked views. The public template contains no instance-specific automations.
+  automation_controls: Private extension templates must contain only current local automation controls and instructions.
+    Retire obsolete rows in both linked views. The public template contains no instance-specific automations.
 views:
 - title: Remeha Heating
   path: remeha-heating
@@ -26,9 +26,6 @@ views:
   max_columns: 2
   show_icon_and_title: true
   sections:
-  # Schéma čte stavy HA při jejich aktualizaci. Čerpadlo a elektrokotel
-  # ukazují elektrický příkon, teploty přebírají jednotky HA. Neznámé
-  # hodnoty se zobrazují pomlčkou a nerozpoznaný režim žádnou větev neanimuje.
   - type: grid
     column_span: 2
     cards:
@@ -50,8 +47,6 @@ views:
       grid_options:
         columns: full
         rows: auto
-      # Čidla zobrazují poslední stav s jednotkou HA uvnitř schématu.
-      # Soukromá šablona může přidat další čidla nebo naměřený atribut hlavice.
       thermometers:
       - entity: '@@ROOM@@'
         name: Room sensor
@@ -120,109 +115,15 @@ views:
         tap_action:
           action: navigate
           navigation_path: '@@DASHBOARD_BASE@@/remeha-heating-details'
-    - type: markdown
-      content: '{# Cloud data is authoritative; an unknown value is not an inactive override. #}
-
-        {% set e = ''@@CLIMATE@@'' %}
-
-        {% if state_attr(e, ''temporary_override_command_pending'') %}**Temporary setting:** waiting for confirmation from
-        Remeha.{% elif state_attr(e, ''temporary_override_active'') == true %}**Temporary setting:** active. {% set end =
-        state_attr(e, ''temporary_override_end_time'') %}{% if end and as_timestamp(end, none) %}Ends: {{ as_timestamp(end)
-        | timestamp_custom(''%Y-%m-%d %H:%M'', true) }}.{% else %}End time unavailable.{% endif %}{% elif state_attr(e, ''temporary_override_active'')
-        == false %}**Temporary setting:** inactive.{% else %}**Temporary setting:** unavailable.{{ '''' }}{% endif %}
-
-
-        Choose a temperature and a duration preset, or enter minutes manually, then press Start. This feature requires a running
-        schedule and a compatible device. The device controls the end time; later manual changes can supersede the setting.'
+    - type: custom:remeha-override-card
+      entity: '@@CLIMATE@@'
+      presets:
+      - 60
+      - 120
+      - 240
+      - 480
       grid_options:
         columns: full
-    - type: custom:confirm-controls-card-v4
-      card:
-        type: entities
-        show_header_toggle: false
-        entities:
-        - entity: '@@TEMPORARY_TEMPERATURE@@'
-          name: Temperature
-        - entity: '@@TEMPORARY_DURATION@@'
-          name: Duration (minutes)
-        grid_options:
-          columns: full
-      grid_options:
-        columns: full
-    - type: grid
-      columns: 4
-      square: false
-      cards:
-      - type: button
-        name: 1 h
-        show_icon: false
-        tap_action:
-          action: perform-action
-          perform_action: number.set_value
-          target:
-            entity_id: '@@TEMPORARY_DURATION@@'
-          data:
-            value: 60
-      - type: button
-        name: 2 h
-        show_icon: false
-        tap_action:
-          action: perform-action
-          perform_action: number.set_value
-          target:
-            entity_id: '@@TEMPORARY_DURATION@@'
-          data:
-            value: 120
-      - type: button
-        name: 4 h
-        show_icon: false
-        tap_action:
-          action: perform-action
-          perform_action: number.set_value
-          target:
-            entity_id: '@@TEMPORARY_DURATION@@'
-          data:
-            value: 240
-      - type: button
-        name: 8 h
-        show_icon: false
-        tap_action:
-          action: perform-action
-          perform_action: number.set_value
-          target:
-            entity_id: '@@TEMPORARY_DURATION@@'
-          data:
-            value: 480
-      grid_options:
-        columns: full
-    - type: grid
-      columns: 2
-      square: false
-      grid_options:
-        columns: full
-      cards:
-      - type: button
-        name: Start
-        icon: mdi:timer-play-outline
-        icon_height: 22px
-        tap_action:
-          action: perform-action
-          perform_action: button.press
-          target:
-            entity_id: '@@TEMPORARY_START@@'
-      - type: button
-        name: End
-        icon: mdi:timer-off-outline
-        icon_height: 22px
-        tap_action:
-          action: perform-action
-          perform_action: climate.set_hvac_mode
-          target:
-            entity_id: '@@CLIMATE@@'
-          data:
-            hvac_mode: auto
-          confirmation:
-            text: End the temporary temperature and return to the current schedule?
   - type: grid
     cards:
     - type: heading
@@ -288,8 +189,8 @@ views:
       grid_options:
         columns: full
     - type: markdown
-      content: Boost starts from Schedule mode. Turning it off returns DHW to Schedule. The device confirms supported targets
-        and timing.
+      content: Boost starts from Schedule mode. Turning it off returns DHW to Schedule. The device confirms supported
+        targets and timing.
       grid_options:
         columns: full
   - type: grid
@@ -328,8 +229,8 @@ views:
         ~ '' W'') if bp is not none else ''Unavailable'' }}**
 
 
-        _Negative power is displayed as 0 W. Energy below covers the current calendar week, month and year using import counters
-        in kWh._'
+        _Negative power is displayed as 0 W. Energy below covers the current calendar week, month and year using import
+        counters in kWh._'
       grid_options:
         columns: full
     - type: statistic
@@ -420,130 +321,21 @@ views:
       icon: mdi:timer-cog-outline
       grid_options:
         columns: full
-    - type: grid
-      columns: 3
-      square: false
-      cards:
-      - type: button
-        name: 30 min
-        show_icon: false
-        tap_action:
-          action: perform-action
-          perform_action: number.set_value
-          target:
-            entity_id: '@@TEMPORARY_DURATION@@'
-          data:
-            value: 30
-      - type: button
-        name: 1 h
-        show_icon: false
-        tap_action:
-          action: perform-action
-          perform_action: number.set_value
-          target:
-            entity_id: '@@TEMPORARY_DURATION@@'
-          data:
-            value: 60
-      - type: button
-        name: 2 h
-        show_icon: false
-        tap_action:
-          action: perform-action
-          perform_action: number.set_value
-          target:
-            entity_id: '@@TEMPORARY_DURATION@@'
-          data:
-            value: 120
-      - type: button
-        name: 3 h
-        show_icon: false
-        tap_action:
-          action: perform-action
-          perform_action: number.set_value
-          target:
-            entity_id: '@@TEMPORARY_DURATION@@'
-          data:
-            value: 180
-      - type: button
-        name: 4 h
-        show_icon: false
-        tap_action:
-          action: perform-action
-          perform_action: number.set_value
-          target:
-            entity_id: '@@TEMPORARY_DURATION@@'
-          data:
-            value: 240
-      - type: button
-        name: 6 h
-        show_icon: false
-        tap_action:
-          action: perform-action
-          perform_action: number.set_value
-          target:
-            entity_id: '@@TEMPORARY_DURATION@@'
-          data:
-            value: 360
-      - type: button
-        name: 8 h
-        show_icon: false
-        tap_action:
-          action: perform-action
-          perform_action: number.set_value
-          target:
-            entity_id: '@@TEMPORARY_DURATION@@'
-          data:
-            value: 480
-      - type: button
-        name: 12 h
-        show_icon: false
-        tap_action:
-          action: perform-action
-          perform_action: number.set_value
-          target:
-            entity_id: '@@TEMPORARY_DURATION@@'
-          data:
-            value: 720
-      - type: button
-        name: 16 h
-        show_icon: false
-        tap_action:
-          action: perform-action
-          perform_action: number.set_value
-          target:
-            entity_id: '@@TEMPORARY_DURATION@@'
-          data:
-            value: 960
-      - type: button
-        name: 20 h
-        show_icon: false
-        tap_action:
-          action: perform-action
-          perform_action: number.set_value
-          target:
-            entity_id: '@@TEMPORARY_DURATION@@'
-          data:
-            value: 1200
-      - type: button
-        name: 24 h
-        show_icon: false
-        tap_action:
-          action: perform-action
-          perform_action: number.set_value
-          target:
-            entity_id: '@@TEMPORARY_DURATION@@'
-          data:
-            value: 1440
-      - type: button
-        name: 48 h
-        show_icon: false
-        tap_action:
-          action: perform-action
-          perform_action: number.set_value
-          target:
-            entity_id: '@@TEMPORARY_DURATION@@'
-          data:
-            value: 2880
+    - type: custom:remeha-override-card
+      entity: '@@CLIMATE@@'
+      presets:
+      - 30
+      - 60
+      - 120
+      - 180
+      - 240
+      - 360
+      - 480
+      - 720
+      - 960
+      - 1200
+      - 1440
+      - 2880
       grid_options:
         columns: full
   - type: grid
@@ -606,8 +398,8 @@ views:
       grid_options:
         columns: full
     - type: markdown
-      content: The main view clamps negative power to zero and excludes reverse-direction energy from consumption. These detail
-        cards show original measurements, including their sign. Stored measurements and history are unchanged.
+      content: The main view clamps negative power to zero and excludes reverse-direction energy from consumption. These
+        detail cards show original measurements, including their sign. Stored measurements and history are unchanged.
       grid_options:
         columns: full
   - type: grid
@@ -659,8 +451,8 @@ views:
       grid_options:
         columns: full
     - type: markdown
-      content: Remeha cloud data may be delayed or unavailable. Unknown values remain unknown. Calendar consumption in the
-        main view uses the electricity import meters; cloud energy is not live electrical power.
+      content: Remeha cloud data may be delayed or unavailable. Unknown values remain unknown. Calendar consumption in
+        the main view uses the electricity import meters; cloud energy is not live electrical power.
       grid_options:
         columns: full
   - type: grid
@@ -697,45 +489,9 @@ views:
         name: Remeha Home update
       grid_options:
         columns: full
-    - type: entities
-      title: Upstream commits
-      show_header_toggle: false
-      entities:
-      - entity: '@@UPSTREAM_ORIGINAL@@'
-        name: Original integration
-      - entity: '@@UPSTREAM_COMMUNITY@@'
-        name: Community fork
-      - entity: '@@UPSTREAM_CHECK@@'
-        name: Check upstream
-      grid_options:
-        columns: full
     - type: markdown
-      content: '{# Read-only diagnostics: counts are confirmed by the public GitHub API.
-
-        A failed or rate-limited check is unavailable, never assumed to be zero. #}
-
-        {% for entity,label in [(''@@UPSTREAM_ORIGINAL@@'',''Original integration''),(''@@UPSTREAM_COMMUNITY@@'',''Community
-        fork'')] %}
-
-        **{{ label }}** · {% if is_number(states(entity)) %}{{ states(entity) }} new commits{% else %}Check unavailable ({{
-        state_attr(entity,''error'') or ''Waiting for data'' }}){% endif %}
-
-        {% set stamp=state_attr(entity,''checked_at'') %}
-
-        {% if stamp %}Checked: {{ as_timestamp(stamp) | timestamp_custom(''%Y-%m-%d %H:%M'', true) }}{% endif %}
-
-        {% if state_attr(entity,''compare_url'') %}[Compare on GitHub]({{ state_attr(entity,''compare_url'') }}){% endif %}
-
-
-        {% endfor %}
-
-        Checks run every 12 hours. The manual button shares a five-minute cache and respects GitHub rate limits. Counts are
-        relative to the upstream commits incorporated into this release; review changes before adopting them.'
-      grid_options:
-        columns: full
-    - type: markdown
-      content: The generator updates this detail subview together with the main view. Keep real entity mappings and any household-specific
-        extensions in private files outside the repository.
+      content: The generator updates this detail subview together with the main view. Keep real entity mappings and any
+        household-specific extensions in private files outside the repository.
       grid_options:
         columns: full
   - type: grid
@@ -781,8 +537,8 @@ views:
       grid_options:
         columns: full
     - type: markdown
-      content: Control ranges come from the device. Using a control changes a Remeha parameter; opening or generating this
-        dashboard only reads data.
+      content: Control ranges come from the device. Using a control changes a Remeha parameter; opening or generating
+        this dashboard only reads data.
       grid_options:
         columns: full
   - type: grid

@@ -9,7 +9,11 @@ from copy import deepcopy
 import pytest
 import yaml
 
-from custom_components.remeha_home.generate_dashboard import TEMPLATE, generate_dashboard
+from custom_components.remeha_home.generate_dashboard import (
+    TEMPLATE,
+    confirm_controls,
+    generate_dashboard,
+)
 
 
 def fixture_data():
@@ -73,105 +77,31 @@ def test_prices_are_excluded_without_removing_energy_or_controls():
     assert "remeha_heating_costs" not in text and "remeha_heating_rate" not in text
     assert "CZK" not in text and "Kč" not in text
     assert bindings["ENERGY_HP"] in text and bindings["ENERGY_BACKUP"] in text
-    assert bindings["TEMPORARY_START"] in text and bindings["CLIMATE"] in text
+    assert "custom:remeha-override-card" in text and bindings["CLIMATE"] in text
 
 
 def test_timed_temperature_bindings():
-    """Ovladače používají správné role i po rozdělení do samostatné sekce."""
+    """Hlavní a detailní karta používají stejný termostat a místní předvolby."""
     source, bindings = fixture_data()
-    main = generate_dashboard(source, bindings)["views"][2]
-    cards = [card for section in main["sections"] for card in section["cards"]]
-    wrapper = next(
+    result = generate_dashboard(source, bindings)
+    controls = [
         card
-        for card in cards
-        if card.get("type") == "custom:confirm-controls-card-v4"
-        and card.get("card", {}).get("type") == "entities"
-        and any(
-            row.get("entity") == bindings["TEMPORARY_TEMPERATURE"]
-            for row in card["card"].get("entities", [])
-        )
-    )
-    controls = wrapper["card"]
-    assert [row["entity"] for row in controls["entities"]] == [
-        bindings["TEMPORARY_TEMPERATURE"],
-        bindings["TEMPORARY_DURATION"],
+        for view in result["views"]
+        for section in view.get("sections", [])
+        for card in section["cards"]
+        if card.get("type") == "custom:remeha-override-card"
     ]
-    actions = [
-        button["tap_action"]
-        for card in cards
-        if card.get("type") == "grid"
-        for button in card.get("cards", [])
-        if button.get("tap_action", {}).get("perform_action")
-        in ("button.press", "climate.set_hvac_mode")
+    assert [card["entity"] for card in controls] == [bindings["CLIMATE"]] * 2
+    assert [card["presets"] for card in controls] == [
+        [60, 120, 240, 480],
+        [30, 60, 120, 180, 240, 360, 480, 720, 960, 1200, 1440, 2880],
     ]
-    start = next(action for action in actions if action["perform_action"] == "button.press")
-    end = next(action for action in actions if action["perform_action"] == "climate.set_hvac_mode")
-    assert start["target"]["entity_id"] == bindings["TEMPORARY_START"]
-    assert end["target"]["entity_id"] == bindings["CLIMATE"]
-    assert end["data"] == {"hvac_mode": "auto"} and end["confirmation"]["text"]
-    bindings["TEMPORARY_START"] = "number.example_wrong"
-    with pytest.raises(ValueError, match="Invalid domain.*TEMPORARY_START"):
-        generate_dashboard(source, bindings)
+    assert "button.press" not in json.dumps(controls)
 
 
-def test_duration_presets_only_set_draft_minutes():
-    """Všech 12 délek zůstává dostupných; rychlé volby pouze mění návrh minut."""
-    source, bindings = fixture_data()
-    generated = generate_dashboard(source, bindings)
-    actions = []
-
-    def collect(value):
-        if isinstance(value, list):
-            for item in value:
-                collect(item)
-        elif isinstance(value, dict):
-            action = value.get("tap_action", {})
-            if (
-                action.get("perform_action") == "number.set_value"
-                and action.get("target", {}).get("entity_id") == bindings["TEMPORARY_DURATION"]
-            ):
-                actions.append((value["name"], action))
-            for item in value.values():
-                collect(item)
-
-    collect(generated)
-    buttons = dict(actions)
-    assert {name: action["data"]["value"] for name, action in buttons.items()} == {
-        "30 min": 30,
-        "1 h": 60,
-        "2 h": 120,
-        "3 h": 180,
-        "4 h": 240,
-        "6 h": 360,
-        "8 h": 480,
-        "12 h": 720,
-        "16 h": 960,
-        "20 h": 1200,
-        "24 h": 1440,
-        "48 h": 2880,
-    }
-    assert all(action["perform_action"] == "number.set_value" for _, action in actions)
-    main = generated["views"][2]
-    temporary = next(
-        section
-        for section in main["sections"]
-        if section["cards"][0].get("heading") == "Temporary temperature"
-    )
-    preset_grid = next(
-        card
-        for card in temporary["cards"]
-        if card.get("type") == "grid"
-        and all(
-            button.get("tap_action", {}).get("perform_action") == "number.set_value"
-            for button in card.get("cards", [])
-        )
-    )
-    assert [button["tap_action"]["data"]["value"] for button in preset_grid["cards"]] == [
-        60,
-        120,
-        240,
-        480,
-    ]
+def test_override_card_rejects_non_climate_entity():
+    with pytest.raises(ValueError, match="requires a climate entity"):
+        confirm_controls({"type": "custom:remeha-override-card", "entity": "sensor.wrong"})
 
 
 def test_private_template_and_explicit_anchor():

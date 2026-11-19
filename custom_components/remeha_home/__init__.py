@@ -6,6 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_entry_oauth2_flow
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 
@@ -16,11 +17,9 @@ from .coordinator import RemehaHomeUpdateCoordinator
 from .energy_history import register_energy_history
 from .export_override import ExportOverrideManager
 from .producer_ids import ProducerIdResolver
-from .upstream import RemehaUpstreamCoordinator
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
-    Platform.BUTTON,
     Platform.CLIMATE,
     Platform.NUMBER,
     Platform.SENSOR,
@@ -91,18 +90,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     hass.data[DOMAIN][entry.entry_id] = {
         "api": api,
         "coordinator": coordinator,
-        "upstream": RemehaUpstreamCoordinator(hass, entry),
     }
 
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    # Tyto vlastní entity nahrazuje stejná služba a panel jako u Huga.
+    # Registr čistíme až po potvrzení přístupu k API této konfigurační položky.
+    registry = er.async_get(hass)
+    retired_suffixes = {
+        "button": ("_start_temporary_temperature", "_upstream_check"),
+        "number": ("_temporary_temperature", "_temporary_duration"),
+        "sensor": ("_upstream_original", "_upstream_community"),
+    }
+    for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if entity.platform == DOMAIN and entity.unique_id.endswith(
+            retired_suffixes.get(entity.domain, ())
+        ):
+            registry.async_remove(entity.entity_id)
 
-    # GitHub je volitelná diagnostika. Start a 60s cyklus topení na něj nečekají;
-    # config entry při unload/restartu zruší případnou rozpracovanou kontrolu.
-    entry.async_create_background_task(
-        hass,
-        hass.data[DOMAIN][entry.entry_id]["upstream"].async_refresh(),
-        "remeha_home initial upstream check",
-    )
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
 

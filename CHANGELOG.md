@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.9 — Use native Remeha dashboard bindings
+
+- Use the shared timed override service for all dashboard temperature and duration presets. Retire the duplicate override entities and integration-specific GitHub diagnostics.
+- Match the native Water Pressure binary sensor name. Keep existing stable registry unique IDs for common entities.
+
 ## v0.5.8 — Preserve holiday recovery through HA restarts
 
 - Store the original schedule and the device-confirmed holiday state before restoring heating and hot water. Explicit Home Assistant changes remain excluded from restoration after a restart.

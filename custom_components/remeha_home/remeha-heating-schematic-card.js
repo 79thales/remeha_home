@@ -430,3 +430,92 @@ class RemehaCalendarCard extends HTMLElement {
   }
 }
 if (!customElements.get('remeha-calendar-card')) customElements.define('remeha-calendar-card', RemehaCalendarCard);
+
+// Ovladač pro oba forky. Návrh teploty a minut zůstává ve formuláři,
+// potvrzený příkaz jde přes společnou službu na jedinou klimatickou entitu.
+class RemehaOverrideCard extends HTMLElement {
+  setConfig(config) {
+    if (!/^climate\.[a-z0-9_]+$/.test(config.entity || '')) {
+      throw new Error('Choose one climate entity');
+    }
+    this.config = config;
+    const cs = config.language === 'cs';
+    this.labels = cs ? {
+      temperature: 'Teplota', duration: 'Délka (min)', start: 'Spustit',
+      stop: 'Vrátit do programu', until: 'Potvrzený konec', unknown: 'Konec není potvrzený.',
+      accepted: 'Povel odeslán. Stav potvrzuje zařízení.', unavailable: 'Zóna je nedostupná.',
+      invalid: 'Zkontroluj teplotu a délku.', confirm: 'Odeslat povel pro tuto zónu?',
+      failed: 'Povel se nepodařilo odeslat.'
+    } : {
+      temperature: 'Temperature', duration: 'Duration (min)', start: 'Start',
+      stop: 'Return to schedule', until: 'Confirmed end', unknown: 'No confirmed end time.',
+      accepted: 'Request sent. The appliance confirms the state.', unavailable: 'Zone unavailable.',
+      invalid: 'Check the temperature and duration.', confirm: 'Send the command to this zone?',
+      failed: 'Could not send the command.'
+    };
+    this.innerHTML = '<ha-card><div style="padding:16px"><p data-end></p><label><span data-temperature></span> <input type="number" style="width:6em"></label> <label><span data-duration></span> <input type="number" inputmode="numeric" min="1" max="10080" step="1" value="60" style="width:6em"></label><p data-presets style="display:flex;flex-wrap:wrap;gap:6px"></p><p><button data-start></button> <button data-stop></button></p><p role="status"></p></div></ha-card>';
+    this.temperature = this.querySelectorAll('input')[0];
+    this.duration = this.querySelectorAll('input')[1];
+    for (const field of ['temperature', 'duration', 'start', 'stop']) {
+      this.querySelector('[data-' + field + ']').textContent = this.labels[field];
+    }
+    for (const minutes of config.presets ?? [60,120,240,480]) {
+      if (!Number.isInteger(minutes) || minutes < 1 || minutes > 10080) continue;
+      const button = document.createElement('button');
+      button.textContent = minutes % 60 === 0 ? (minutes / 60) + ' h' : minutes + ' min';
+      button.onclick = () => { this.duration.value = minutes; };
+      this.querySelector('[data-presets]').append(button);
+    }
+    this.querySelector('[data-start]').onclick = () => this.send(false);
+    this.querySelector('[data-stop]').onclick = () => this.send(true);
+  }
+  set hass(hass) {
+    this.ha = hass;
+    if (!this.config) return;
+    const state = hass.states[this.config.entity];
+    const attributes = state?.attributes ?? {};
+    const usable = state && !['unknown','unavailable'].includes(state.state);
+    // Oba forky vrací místní ISO čas. Prázdný údaj sám nerozliší program
+    // od časově neomezeného override, proto zobrazujeme jen potvrzený konec.
+    const end = attributes.override_end_time;
+    this.querySelector('[data-end]').textContent = !usable ? this.labels.unavailable :
+      end && !Number.isNaN(Date.parse(end)) ? this.labels.until + ' · ' + new Date(end).toLocaleString() : this.labels.unknown;
+    for (const [name, value] of [['min', attributes.min_temp], ['max', attributes.max_temp], ['step', attributes.target_temp_step ?? 0.5]]) {
+      if (Number.isFinite(value)) this.temperature[name] = value;
+    }
+    if (!this.initialized && Number.isFinite(attributes.temperature)) {
+      this.temperature.value = attributes.temperature;
+      this.initialized = true;
+    }
+    this.querySelector('[data-start]').disabled = !!this.busy || state?.state !== 'auto' ||
+      !hass.services?.remeha_home?.set_temporary_override;
+    this.querySelector('[data-stop]').disabled = !!this.busy || state?.state !== 'auto';
+  }
+  async send(stop) {
+    const button = this.querySelector(stop ? '[data-stop]' : '[data-start]');
+    if (button.disabled) return;
+    const status = this.querySelector('[role=status]');
+    const temperature = this.temperature.valueAsNumber;
+    const minutes = this.duration.valueAsNumber;
+    if (!stop && (!Number.isFinite(temperature) || !this.temperature.checkValidity() ||
+      !Number.isInteger(minutes) || !this.duration.checkValidity())) {
+      status.textContent = this.labels.invalid;
+      return;
+    }
+    if (!window.confirm(this.labels.confirm)) return;
+    this.busy = true;
+    this.hass = this.ha;
+    const target = {entity_id:this.config.entity};
+    try {
+      if (stop) await this.ha.callService('climate','set_hvac_mode',{hvac_mode:'auto'},target);
+      else await this.ha.callService('remeha_home','set_temporary_override',{temperature,duration:{minutes}},target);
+      status.textContent = this.labels.accepted;
+    } catch (error) {
+      status.textContent = error.message || this.labels.failed;
+    } finally {
+      this.busy = false;
+      this.hass = this.ha;
+    }
+  }
+}
+if (!customElements.get('remeha-override-card')) customElements.define('remeha-override-card', RemehaOverrideCard);

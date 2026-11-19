@@ -255,7 +255,7 @@ APPLIANCE_BINARY_SENSOR_TYPES = [
     (
         BinarySensorEntityDescription(
             key="waterPressureOK",
-            name="Water Pressure Problem",
+            name="Water Pressure",
             device_class=BinarySensorDeviceClass.PROBLEM,
         ),
         lambda value: not value,
