@@ -1,3 +1,40 @@
+set_temporary_override:
+  name: Set temporary temperature override
+  description: Set one zone temporarily after checking its schedule and timed override support.
+  target:
+    entity:
+      integration: remeha_home
+      domain: climate
+  fields:
+    temperature:
+      required: true
+      selector:
+        number:
+          min: 5
+          max: 30
+          step: 0.5
+          unit_of_measurement: °C
+    duration:
+      required: true
+      selector:
+        duration:
+get_energy_history:
+  name: Get energy history
+  description: Read closed calendar days of estimated appliance energy in kWh.
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: remeha_home
+    start_date:
+      required: true
+      selector:
+        date:
+    end_date:
+      required: true
+      selector:
+        date:
 start_export_override:
   name: Start export temperature overlay
   description: Experimentally raise an existing timed user override, preserving its original end time. Requires a confirmed cloud state.

@@ -12,6 +12,8 @@ from scripts.build_release import is_release_file
         ("dashboard-template.json", True),
         ("dashboard-template.yaml", True),
         ("dashboard-bindings.example.json", True),
+        ("remeha-heating-schematic-card.js", True),
+        ("unrelated.js", False),
         ("translations/en.json", True),
         ("dashboard-private/template.json", False),
         ("private/profile.json", False),

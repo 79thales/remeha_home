@@ -81,15 +81,17 @@ def test_timed_temperature_bindings():
     source, bindings = fixture_data()
     main = generate_dashboard(source, bindings)["views"][2]
     cards = [card for section in main["sections"] for card in section["cards"]]
-    controls = next(
+    wrapper = next(
         card
         for card in cards
-        if card.get("type") == "entities"
+        if card.get("type") == "custom:confirm-controls-card-v4"
+        and card.get("card", {}).get("type") == "entities"
         and any(
             row.get("entity") == bindings["TEMPORARY_TEMPERATURE"]
-            for row in card.get("entities", [])
+            for row in card["card"].get("entities", [])
         )
     )
+    controls = wrapper["card"]
     assert [row["entity"] for row in controls["entities"]] == [
         bindings["TEMPORARY_TEMPERATURE"],
         bindings["TEMPORARY_DURATION"],
@@ -150,7 +152,11 @@ def test_duration_presets_only_set_draft_minutes():
     }
     assert all(action["perform_action"] == "number.set_value" for _, action in actions)
     main = generated["views"][2]
-    temporary = main["sections"][1]
+    temporary = next(
+        section
+        for section in main["sections"]
+        if section["cards"][0].get("heading") == "Temporary temperature"
+    )
     preset_grid = next(
         card
         for card in temporary["cards"]

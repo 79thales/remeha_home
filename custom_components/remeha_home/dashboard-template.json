@@ -6,7 +6,8 @@
     "energy": "Calendar statistics show changes in import energy counters in kWh; live power remains in W.",
     "side_effects": "Generation is offline; controls write only when used. No history, automations or other views are changed.",
     "customization": "Use --template for a private main/detail composition and --insert-after for an optional existing view anchor.",
-    "layout": "Heating and temporary-temperature controls come first, followed by hot water and electricity; sections stack on mobile.",
+    "layout": "The system diagram includes compact thermometers, followed by heating, temporary temperature, hot water and electricity. Controls stack on mobile.",
+    "schematic": "Requires the bundled remeha-heating-schematic-card.js as a Lovelace module. It reads current HA states and animates recognized modes reported by Remeha. The animation represents the active mode, not a measured flow rate.",
     "temporary": "Temperature in degrees Celsius and duration in minutes are drafts. Presets change only draft minutes; Start sends the existing command. Confirmed Stop requests the current schedule. No new timers or automations are created.",
     "unknown": "Unknown, pending and stale states are never treated as confirmed success or as zero.",
     "details": "All 12 duration presets and complete diagnostics remain in the linked Details subview.",
@@ -21,6 +22,38 @@
       "max_columns": 2,
       "show_icon_and_title": true,
       "sections": [
+        {
+          "type": "grid",
+          "column_span": 2,
+          "cards": [
+            {
+              "type": "custom:remeha-heating-schematic-card",
+              "language": "en",
+              "entities": {
+                "thermal": "@@THERMAL@@",
+                "online": "@@APPLIANCE_ONLINE@@",
+                "power": "@@POWER_HP@@",
+                "backup_power": "@@POWER_BACKUP@@",
+                "hot_water": "@@DHW_TEMP@@",
+                "water_heater": "@@DHW@@",
+                "climate": "@@CLIMATE@@",
+                "room": "@@ROOM@@",
+                "outdoor": "@@OUTDOOR@@",
+                "pressure": "@@PRESSURE@@",
+                "slope": "@@SLOPE@@",
+                "base": "@@BASE@@"
+              },
+              "grid_options": {
+                "columns": "full",
+                "rows": "auto"
+              },
+              "thermometers": [
+                { "entity": "@@ROOM@@", "name": "Room sensor", "reference": true },
+                { "entity": "@@OUTDOOR@@", "name": "Outdoor sensor" }
+              ]
+            }
+          ]
+        },
         {
           "type": "grid",
           "cards": [
@@ -45,24 +78,10 @@
               ]
             },
             {
-              "type": "tile",
+              "type": "thermostat",
               "entity": "@@CLIMATE@@",
               "name": "Heating zone",
-              "state_content": [
-                "current_temperature",
-                "temperature",
-                "hvac_action"
-              ],
-              "tap_action": {
-                "action": "more-info"
-              },
-              "icon_tap_action": {
-                "action": "more-info"
-              },
               "features": [
-                {
-                  "type": "target-temperature"
-                },
                 {
                   "type": "climate-hvac-modes",
                   "hvac_modes": [
@@ -77,35 +96,41 @@
               }
             },
             {
-              "type": "entities",
-              "title": "Status and schedule",
-              "show_header_toggle": false,
-              "entities": [
-                {
-                  "entity": "@@CLIMATE_STATUS@@",
-                  "name": "Heating zone status"
-                },
-                {
-                  "entity": "@@THERMAL@@",
-                  "name": "Heat pump operation"
-                },
-                {
-                  "entity": "@@SCHEDULE_TEMP@@",
-                  "name": "Scheduled temperature"
-                },
-                {
-                  "entity": "@@NEXT_TEMP@@",
-                  "name": "Next temperature"
-                },
-                {
-                  "entity": "@@NEXT_TIME@@",
-                  "name": "Next schedule change"
-                },
-                {
-                  "entity": "@@FIREPLACE@@",
-                  "name": "Fireplace mode"
+              "type": "custom:confirm-controls-card-v4",
+              "card": {
+                "type": "entities",
+                "title": "Status and schedule",
+                "show_header_toggle": false,
+                "entities": [
+                  {
+                    "entity": "@@CLIMATE_STATUS@@",
+                    "name": "Heating zone status"
+                  },
+                  {
+                    "entity": "@@THERMAL@@",
+                    "name": "Heat pump operation"
+                  },
+                  {
+                    "entity": "@@SCHEDULE_TEMP@@",
+                    "name": "Scheduled temperature"
+                  },
+                  {
+                    "entity": "@@NEXT_TEMP@@",
+                    "name": "Next temperature"
+                  },
+                  {
+                    "entity": "@@NEXT_TIME@@",
+                    "name": "Next schedule change"
+                  },
+                  {
+                    "entity": "@@FIREPLACE@@",
+                    "name": "Fireplace mode"
+                  }
+                ],
+                "grid_options": {
+                  "columns": "full"
                 }
-              ],
+              },
               "grid_options": {
                 "columns": "full"
               }
@@ -142,18 +167,24 @@
               }
             },
             {
-              "type": "entities",
-              "show_header_toggle": false,
-              "entities": [
-                {
-                  "entity": "@@TEMPORARY_TEMPERATURE@@",
-                  "name": "Temperature"
-                },
-                {
-                  "entity": "@@TEMPORARY_DURATION@@",
-                  "name": "Duration (minutes)"
+              "type": "custom:confirm-controls-card-v4",
+              "card": {
+                "type": "entities",
+                "show_header_toggle": false,
+                "entities": [
+                  {
+                    "entity": "@@TEMPORARY_TEMPERATURE@@",
+                    "name": "Temperature"
+                  },
+                  {
+                    "entity": "@@TEMPORARY_DURATION@@",
+                    "name": "Duration (minutes)"
+                  }
+                ],
+                "grid_options": {
+                  "columns": "full"
                 }
-              ],
+              },
               "grid_options": {
                 "columns": "full"
               }
@@ -319,32 +350,44 @@
               }
             },
             {
-              "type": "entities",
-              "title": "DHW targets",
-              "show_header_toggle": false,
-              "entities": [
-                {
-                  "entity": "@@COMFORT@@",
-                  "name": "Comfort temperature"
-                },
-                {
-                  "entity": "@@ECO@@",
-                  "name": "Eco temperature"
+              "type": "custom:confirm-controls-card-v4",
+              "card": {
+                "type": "entities",
+                "title": "DHW targets",
+                "show_header_toggle": false,
+                "entities": [
+                  {
+                    "entity": "@@COMFORT@@",
+                    "name": "Comfort temperature"
+                  },
+                  {
+                    "entity": "@@ECO@@",
+                    "name": "Eco temperature"
+                  }
+                ],
+                "grid_options": {
+                  "columns": "full"
                 }
-              ],
+              },
               "grid_options": {
                 "columns": "full"
               }
             },
             {
-              "type": "tile",
-              "entity": "@@BOOST@@",
-              "name": "DHW boost",
+              "type": "custom:confirm-controls-card-v4",
+              "card": {
+                "type": "tile",
+                "entity": "@@BOOST@@",
+                "name": "DHW boost",
+                "grid_options": {
+                  "columns": "full"
+                },
+                "tap_action": {
+                  "action": "toggle"
+                }
+              },
               "grid_options": {
                 "columns": "full"
-              },
-              "tap_action": {
-                "action": "toggle"
               }
             },
             {
@@ -1026,49 +1069,61 @@
               }
             },
             {
-              "type": "entities",
-              "title": "Heating curve",
-              "show_header_toggle": false,
-              "entities": [
-                {
-                  "entity": "@@SLOPE@@",
-                  "name": "Curve slope"
-                },
-                {
-                  "entity": "@@BASE@@",
-                  "name": "Curve base temperature (°C)"
+              "type": "custom:confirm-controls-card-v4",
+              "card": {
+                "type": "entities",
+                "title": "Heating curve",
+                "show_header_toggle": false,
+                "entities": [
+                  {
+                    "entity": "@@SLOPE@@",
+                    "name": "Curve slope"
+                  },
+                  {
+                    "entity": "@@BASE@@",
+                    "name": "Curve base temperature (°C)"
+                  }
+                ],
+                "grid_options": {
+                  "columns": "full"
                 }
-              ],
+              },
               "grid_options": {
                 "columns": "full"
               }
             },
             {
-              "type": "entities",
-              "title": "Heating activity temperatures",
-              "show_header_toggle": false,
-              "entities": [
-                {
-                  "entity": "@@ACTIVITY_1@@",
-                  "name": "Activity 1"
-                },
-                {
-                  "entity": "@@ACTIVITY_2@@",
-                  "name": "Activity 2"
-                },
-                {
-                  "entity": "@@ACTIVITY_3@@",
-                  "name": "Activity 3"
-                },
-                {
-                  "entity": "@@ACTIVITY_4@@",
-                  "name": "Activity 4"
-                },
-                {
-                  "entity": "@@ACTIVITY_5@@",
-                  "name": "Activity 5"
+              "type": "custom:confirm-controls-card-v4",
+              "card": {
+                "type": "entities",
+                "title": "Heating activity temperatures",
+                "show_header_toggle": false,
+                "entities": [
+                  {
+                    "entity": "@@ACTIVITY_1@@",
+                    "name": "Activity 1"
+                  },
+                  {
+                    "entity": "@@ACTIVITY_2@@",
+                    "name": "Activity 2"
+                  },
+                  {
+                    "entity": "@@ACTIVITY_3@@",
+                    "name": "Activity 3"
+                  },
+                  {
+                    "entity": "@@ACTIVITY_4@@",
+                    "name": "Activity 4"
+                  },
+                  {
+                    "entity": "@@ACTIVITY_5@@",
+                    "name": "Activity 5"
+                  }
+                ],
+                "grid_options": {
+                  "columns": "full"
                 }
-              ],
+              },
               "grid_options": {
                 "columns": "full"
               }

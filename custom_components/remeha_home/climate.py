@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import Any
 
 import voluptuous as vol
@@ -17,6 +18,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, PRECISION_HALVES, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -33,6 +35,7 @@ from .export_override import (
     restore_export,
     start_export,
 )
+from .temporary import start_override
 from .util import serialized_command
 
 _LOGGER = logging.getLogger(__name__)
@@ -110,6 +113,16 @@ async def async_setup_entry(
 
     async_add_entities(entities)
     platform = entity_platform.async_get_current_platform()
+    platform.async_register_entity_service(
+        "set_temporary_override",
+        {
+            vol.Required("temperature"): vol.Coerce(float),
+            vol.Required("duration"): vol.All(
+                cv.time_period, vol.Range(min=timedelta(minutes=1), max=timedelta(days=7))
+            ),
+        },
+        "async_set_temporary_override",
+    )
     platform.async_register_entity_service(
         "start_export_override",
         {
@@ -236,10 +249,22 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
         data = self._data or {}
         mode = data.get("zoneMode")
         override = data.get("temporaryOverride")
+        raw_end = override.get("endTime") if isinstance(override, dict) else None
+        try:
+            end = dt_util.parse_datetime(raw_end) if isinstance(raw_end, str) else None
+        except ValueError:
+            end = None
+        if end is not None and end.tzinfo is None:
+            end = end.replace(tzinfo=dt_util.UTC)
         manager = getattr(self.coordinator, "export_override_manager", None)
         record = manager.records.get(self.climate_zone_id) if manager else None
         return {
             "remeha_zone_mode": mode,
+            # Hugův atribut sdílí údaj s původním atributem, který zůstává
+            # v podobě API kvůli existujícím automatizacím a dashboardům.
+            "override_end_time": dt_util.as_local(end).isoformat()
+            if mode == "TemporaryOverride" and end is not None and end.year > 1
+            else None,
             "temporary_override_active": (mode == "TemporaryOverride")
             if mode in ("TemporaryOverride", "Scheduling", "Manual", "FrostProtection")
             else None,
@@ -255,6 +280,10 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
             "export_override_user_temperature": record.get("user_temperature") if record else None,
             "export_override_end_time": record.get("end_time") if record else None,
         }
+
+    async def async_set_temporary_override(self, temperature: float, duration: timedelta) -> None:
+        """Použít stejný zámek, čerstvé čtení a potvrzování jako časované tlačítko."""
+        await start_override(self, temperature, duration)
 
     async def async_start_export_override(
         self,

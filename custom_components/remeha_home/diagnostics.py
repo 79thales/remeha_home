@@ -20,6 +20,11 @@ async def async_get_config_entry_diagnostics(hass, entry):
                     "heating_curve_available": coordinator.get_heating_curve(zone_id) is not None,
                     "activities_available": coordinator.get_activities(zone_id) is not None,
                     "mode": zone.get("zoneMode"),
+                    # Tříhodnotový údaj pomáhá připravit mapování na Huga.
+                    # Chybějící capability je neověřená, API data neukládáme.
+                    "timed_override_supported": zone.get("capabilityTemporaryOverrideEndTime")
+                    if type(zone.get("capabilityTemporaryOverrideEndTime")) is bool
+                    else None,
                 }
             )
         appliances.append(

@@ -14,11 +14,14 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 
 def is_release_file(file: Path, source: Path) -> bool:
-    """Accept source formats while excluding private profiles and generated caches."""
+    """Zabalí zdroje integrace a jediný modul Lovelace, vynechá soukromé soubory."""
     relative = file.relative_to(source)
     return (
         file.is_file()
-        and file.suffix in {".py", ".json", ".yaml"}
+        and (
+            file.suffix in {".py", ".json", ".yaml"}
+            or relative == Path("remeha-heating-schematic-card.js")
+        )
         and not any(
             part in {"__pycache__", "private", "dashboard-private"} for part in relative.parts
         )

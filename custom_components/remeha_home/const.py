@@ -9,7 +9,13 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import UnitOfEnergy, UnitOfPressure, UnitOfTemperature, UnitOfVolume
+from homeassistant.const import (
+    EntityCategory,
+    UnitOfEnergy,
+    UnitOfPressure,
+    UnitOfTemperature,
+    UnitOfVolume,
+)
 
 DOMAIN = "remeha_home"
 
@@ -164,6 +170,13 @@ GAS_PRODUCER_SENSOR_TYPES = [
 
 CLIMATE_ZONE_SENSOR_TYPES = [
     SensorEntityDescription(
+        key="activeHeatingClimateTimeProgramNumber",
+        name="Clock Program",
+        device_class=SensorDeviceClass.ENUM,
+        options=["clock_program_1", "clock_program_2", "clock_program_3"],
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
         key="roomTemperature",
         name="Room Temperature",
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
@@ -194,6 +207,13 @@ CLIMATE_ZONE_SENSOR_TYPES = [
 ]
 
 HOT_WATER_ZONE_SENSOR_TYPES = [
+    SensorEntityDescription(
+        key="activeDwhTimeProgramNumber",
+        name="Clock Program",
+        device_class=SensorDeviceClass.ENUM,
+        options=["clock_program_1", "clock_program_2", "clock_program_3"],
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
     SensorEntityDescription(
         key="dhwTemperature",
         name="Water Temperature",

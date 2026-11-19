@@ -10,7 +10,8 @@ python scripts/build_release.py --tag vX.Y.Z --output remeha_home.zip
 
 The archive stores integration files at its root, as required by `zip_release`
 in `hacs.json`. It includes Python, JSON, and YAML sources, translations, generic
-dashboard templates, and synthetic example bindings. It excludes caches,
+dashboard templates, synthetic example bindings, and the heating diagram module.
+It excludes caches,
 `private/`, `dashboard-private/`, private-named files, and non-example bindings.
 Keep actual household profiles and generated configurations outside the source
 tree; exclusion rules supplement that separation rather than detecting arbitrary

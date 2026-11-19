@@ -34,6 +34,8 @@ from .upstream import SOURCES
 
 _LOGGER = logging.getLogger(__name__)
 
+CLOCK_PROGRAM_KEYS = {"activeHeatingClimateTimeProgramNumber", "activeDwhTimeProgramNumber"}
+
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
@@ -141,6 +143,10 @@ class RemehaHomeSensor(CoordinatorEntity, SensorEntity):
                 return None
             data = data[part]
         value = data
+        if self.entity_description.key in CLOCK_PROGRAM_KEYS:
+            # Číslo programu je z posledního pollu příslušné zóny. Výstup
+            # používá stejné hodnoty jako Hugo i presety klimatické entity.
+            return f"clock_program_{value}" if type(value) is int and 1 <= value <= 3 else None
 
         if self.entity_description.device_class == SensorDeviceClass.TIMESTAMP:
             # Zachovat offset API. Naivní čas interpretujeme v pásmu HA;
@@ -153,6 +159,14 @@ class RemehaHomeSensor(CoordinatorEntity, SensorEntity):
             return dt_util.as_utc(parsed)
 
         return value
+
+    @property
+    def extra_state_attributes(self):
+        """Zpřístupnit číslo programu bez dalšího požadavku na API."""
+        if self.entity_description.key in CLOCK_PROGRAM_KEYS:
+            value = self.native_value
+            return {"program": int(value[-1]) if value is not None else None}
+        return super().extra_state_attributes
 
     @property
     def device_info(self) -> DeviceInfo:

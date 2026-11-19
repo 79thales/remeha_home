@@ -332,6 +332,7 @@ async def test_timed_controls_register_without_writing_and_unload(
     for entity_id in (climate, temperature, duration, button):
         assert hass.states.get(entity_id) is not None
     for name in (
+        "set_temporary_override",
         "start_export_override",
         "restore_export_override",
         "reconcile_export_override",
@@ -345,6 +346,36 @@ async def test_timed_controls_register_without_writing_and_unload(
         )
         assert float(hass.states.get(entity_id).state) == value
     assert not any(call[0].startswith(("async_set_", "async_activate_")) for call in api.mock_calls)
+
+    # Ověřit kompatibilní služby přes skutečný registr a směrování HA.
+    clock = registry.async_get_entity_id(
+        "sensor", "remeha_home", f"remeha_home_{zone_id}_activeHeatingClimateTimeProgramNumber"
+    )
+    assert hass.states.get(clock).state == "clock_program_1"
+    assert hass.states.get(clock).attributes["program"] == 1
+
+    api.async_get_consumption_data_for_range.return_value = {"data": []}
+    response = await hass.services.async_call(
+        "remeha_home",
+        "get_energy_history",
+        {
+            "device_id": registry.async_get(climate).device_id,
+            "start_date": "2026-01-01",
+            "end_date": "2026-01-01",
+        },
+        blocking=True,
+        return_response=True,
+    )
+    assert response["appliance_id"] == "appliance-1"
+    assert response["missing_dates"] == ["2026-01-01"]
+    await hass.services.async_call(
+        "remeha_home",
+        "set_temporary_override",
+        {"entity_id": climate, "temperature": 21.5, "duration": {"seconds": 90}},
+        blocking=True,
+    )
+    api.async_set_temporary_override.assert_awaited_once()
+    assert api.async_set_temporary_override.await_args.args[:2] == (zone_id, 21.5)
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()

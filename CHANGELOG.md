@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Add `remeha_home.set_temporary_override` with an explicit duration, using the existing zone lock, capability checks, and pending-command tracking. Expose the reported end in the `override_end_time` attribute.
+- Add the read-only `remeha_home.get_energy_history` action for closed calendar days. Reports identify missing days and keep heat-pump and gas energy separate.
+- Expose the active heating and hot-water clock programs and include timed-override capability in diagnostics.
+- Include the heating schematic card alongside the dashboard generator and both templates. Preserve existing entity identities and export-overlay services.
+
 ## 0.5.2 — 2026-11-05
 
 - Adapt the native temperature interface used by Home Assistant 2026.11 while retaining the legacy interface on 2026.10.

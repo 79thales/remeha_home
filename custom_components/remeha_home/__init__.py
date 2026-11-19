@@ -12,6 +12,7 @@ from .api import RemehaHomeAPI, RemehaHomeOAuth2Implementation
 from .config_flow import RemehaHomeLoginFlowHandler
 from .const import DOMAIN
 from .coordinator import RemehaHomeUpdateCoordinator
+from .energy_history import register_energy_history
 from .export_override import ExportOverrideManager
 from .upstream import RemehaUpstreamCoordinator
 
@@ -29,6 +30,7 @@ PLATFORMS: list[Platform] = [
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up Remeha Home."""
     hass.data.setdefault(DOMAIN, {})
+    register_energy_history(hass)
 
     RemehaHomeLoginFlowHandler.async_register_implementation(
         hass,

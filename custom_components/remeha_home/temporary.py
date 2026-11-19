@@ -24,6 +24,16 @@ async def start_override(entity, temperature, duration_minutes):
     climate commands and external apps may race with this request; the device
     decides their order. Never retry an uncertain write or restore a timer.
     """
+    # Tlačítko historicky očekává celé minuty. Služba přijímá časový interval
+    # HA a předává timedelta, aby se např. 90 sekund nezaokrouhlilo na minuty.
+    native_service = isinstance(duration_minutes, timedelta)
+    duration = (
+        duration_minutes
+        if native_service
+        else timedelta(minutes=duration_minutes)
+        if type(duration_minutes) is int and 1 <= duration_minutes <= 10080
+        else None
+    )
     coordinator = entity.coordinator
     await coordinator.async_refresh()
     zone = coordinator.get_by_id(entity.climate_zone_id) or {}
@@ -35,10 +45,12 @@ async def start_override(entity, temperature, duration_minutes):
     if zone.get("zoneMode") not in ("Scheduling", "TemporaryOverride"):
         raise ServiceValidationError("Timed override requires schedule mode")
     validate_value(temperature, zone.get("setPointMin"), zone.get("setPointMax"))
-    if type(duration_minutes) is not int or not 1 <= duration_minutes <= 10080:
-        raise ServiceValidationError("Duration must be between 1 and 10080 minutes")
+    if duration is None or not timedelta(minutes=1) <= duration <= timedelta(days=7):
+        raise ServiceValidationError("Duration must be between 1 minute and 7 days")
+    if native_service and entity.climate_zone_id in getattr(coordinator, "temporary_pending", {}):
+        raise ServiceValidationError("The previous timed override is awaiting confirmation")
     await invalidate_local_export(entity)
-    end = (dt_util.utcnow() + timedelta(minutes=duration_minutes)).replace(microsecond=0)
+    end = (dt_util.utcnow() + duration).replace(microsecond=0)
     # Signal uncertainty before the network request so observers can suspend
     # conflicting automatic writes immediately. An HTTP success is not proof
     # that the device has applied the request. Lost responses stay uncertain.

@@ -204,6 +204,21 @@ class RemehaHomeAPI:
         json = await response.json()
         return json
 
+    async def async_get_consumption_data_for_range(
+        self, appliance_id: str, start: datetime.date, end: datetime.date
+    ) -> dict:
+        """Na vyžádání přečíst denní odhady za uzavřený interval kalendářních dat."""
+        response = await self._async_api_request(
+            "GET",
+            f"/appliances/{appliance_id}/energyconsumption/daily",
+            params={
+                "startDate": f"{start.isoformat()}T00:00:00.000Z",
+                "endDate": f"{end.isoformat()}T23:59:59.999Z",
+            },
+        )
+        response.raise_for_status()
+        return await response.json()
+
     async def async_set_dhw_comfort_setpoint(self, hot_water_zone_id: str, setpoint: float):
         """Set the comfort (continuous) target temperature for a DHW zone."""
         response = await self._async_api_request(
