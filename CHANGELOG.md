@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.5.7 — Restore the heating schedule after a holiday
+
+- Restore the original heating clock program if an observed holiday leaves the zone in frost protection. Explicit HA overrides take precedence.
+
 ## v0.5.6 — Restore hot water after a holiday
 
 - Restore scheduled DHW after a confirmed holiday left the zone off. Explicit HA changes take precedence. The pending recovery is held in memory and cleared on reload.

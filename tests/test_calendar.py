@@ -76,11 +76,18 @@ async def test_holiday_api_contract():
 async def test_holiday_water_restores_only_observed_off_zone(ready, manual):
     coordinator, _ = ready
     coordinator.api.async_set_dhw_mode_schedule = AsyncMock()
+    coordinator.api.async_set_schedule = AsyncMock()
     recover = coordinator.holiday_water_restore
     start = dt_util.now().date()
     end = start + timedelta(days=1)
     zone = {"hotWaterZoneId": "scheduled", "dhwZoneMode": "Scheduling"}
+    heating = {
+        "climateZoneId": "heating",
+        "zoneMode": "Scheduling",
+        "activeHeatingClimateTimeProgramNumber": 1,
+    }
     appliance = {
+        "climateZones": [heating],
         "applianceId": "appliance-1",
         "holidaySchedule": {"active": False},
         "hotWaterZones": [zone, {"hotWaterZoneId": "originally-off", "dhwZoneMode": "Off"}],
@@ -92,16 +99,20 @@ async def test_holiday_water_restores_only_observed_off_zone(ready, manual):
         "endTime": end.isoformat(),
     }
     zone["dhwZoneMode"] = "Off"
+    heating["zoneMode"] = "FrostProtection"
     await recover.observe(appliance)
     appliance["holidaySchedule"] = {"active": True}
     await recover.observe(appliance)
     coordinator.api.async_set_dhw_mode_schedule.assert_not_awaited()
     if manual:
         recover.forget_zone("scheduled")
+        recover.forget_zone("heating")
     appliance["holidaySchedule"]["active"] = False
     await recover.observe(appliance)
     await recover.observe(appliance)
     if manual:
         coordinator.api.async_set_dhw_mode_schedule.assert_not_awaited()
+        coordinator.api.async_set_schedule.assert_not_awaited()
     else:
         coordinator.api.async_set_dhw_mode_schedule.assert_awaited_once_with("scheduled")
+        coordinator.api.async_set_schedule.assert_awaited_once_with("heating", 1)
