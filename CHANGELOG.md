@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.5.3 — Preparation for merging with Hugo's fork
+
+This prerelease aligns shared interfaces with `hugo-leij/remeha_home` as a first step toward combining the forks. It keeps the existing installation and its entity identities in place while compatibility is verified.
 
 - Add `remeha_home.set_temporary_override` with an explicit duration, using the existing zone lock, capability checks, and pending-command tracking. Expose the reported end in the `override_end_time` attribute.
 - Add the read-only `remeha_home.get_energy_history` action for closed calendar days. Reports identify missing days and keep heat-pump and gas energy separate.

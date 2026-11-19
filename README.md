@@ -17,6 +17,10 @@ HACS displays documentation for the installed version. The unified header and ge
 
 Remeha Home is an independently maintained custom integration for Home Assistant **2026.8 or newer**. This fork preserves the `remeha_home` domain, existing device and entity identities, the `heat`, `auto`, and `off` modes, and the `clock_program_1` to `clock_program_3` presets. Your thermostat must already work in the official Remeha Home app.
 
+### Preparing to merge with Hugo's fork
+
+Version 0.5.3 is the first compatibility step toward joining forces with `hugo-leij/remeha_home`. It aligns the timed-override action, energy-history action, and active clock-program sensors while keeping existing entity identities and controls. The per-zone write lock and migration of existing Home Assistant installations still need review before the forks can be combined. [Follow the collaboration](https://github.com/79thales/remeha_home/issues/1).
+
 ### Features
 
 - Heating thermostat, operating status, room/outdoor temperature, water pressure, and schedules.
