@@ -99,6 +99,28 @@ def test_timed_temperature_bindings():
     assert "button.press" not in json.dumps(controls)
 
 
+def test_legacy_thermostat_filter_follows_native_modes():
+    """Původní soukromá šablona má po regeneraci číst režimy přímo ze zóny."""
+    source, bindings = fixture_data()
+    template = json.loads(TEMPLATE.read_text(encoding="utf-8"))
+    thermostat = next(
+        card
+        for section in template["views"][0]["sections"]
+        for card in section["cards"]
+        if card.get("type") == "thermostat"
+    )
+    thermostat["features"][0]["hvac_modes"] = ["off", "heat", "auto"]
+    result = generate_dashboard(source, bindings, template)
+    generated = next(
+        card
+        for section in result["views"][2]["sections"]
+        for card in section["cards"]
+        if card.get("type") == "thermostat"
+    )
+    assert generated["features"] == [{"type": "climate-hvac-modes"}]
+    assert thermostat["features"][0]["hvac_modes"] == ["off", "heat", "auto"]
+
+
 def test_override_card_rejects_non_climate_entity():
     with pytest.raises(ValueError, match="requires a climate entity"):
         confirm_controls({"type": "custom:remeha-override-card", "entity": "sensor.wrong"})

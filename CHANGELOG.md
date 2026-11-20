@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.5.11 — Native manual climate mode and dashboard controls
+
+- Manual mode follows the zone's cooling capability as in Hugo's integration. Heating-only zones expose `heat` and cooling-capable zones expose `heat_cool`. Both map to the appliance's Manual mode. Automations that specify an HVAC mode should select the one offered by the target zone.
+- Generated thermostats display the zone's supported modes, including when regenerated from older private templates. The timed-temperature card follows the dashboard theme. Selecting a duration edits the draft before the user starts the override.
+- This stable release includes the phase-one changes from v0.5.3–v0.5.10. When upgrading from v0.4.0, check dashboard and automation references to retired override entities and use `remeha_home.set_temporary_override` for timed control. Site-specific automations are managed separately.
+
 ## v0.5.10 — Preserve temporary override confirmation across restart
 
 - Persist the pending command for each zone before sending a timed temperature override.

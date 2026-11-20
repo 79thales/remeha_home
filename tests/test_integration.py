@@ -104,13 +104,19 @@ async def test_optional_auth_error_requests_reauthentication(ready, api):
         await c._async_update_data()
 
 
-async def test_heat_contract_for_existing_automations(ready):
+@pytest.mark.parametrize("can_cool", [False, True])
+async def test_native_manual_mode_and_combined_temperature_command(ready, can_cool):
+    """Zóna nabídne jediný ruční režim, obě varianty volají stejnou zónu v API."""
+    coordinator, _ = ready
+    if not can_cool:
+        coordinator.activities_data["zone-1"] = []
     climate = entity(RemehaHomeClimateEntity, ready, "zone-1")
-    assert climate.hvac_mode == HVACMode.HEAT
+    expected = HVACMode.HEAT_COOL if can_cool else HVACMode.HEAT
+    assert climate.hvac_mode == expected
     assert climate.preset_mode == "manual"
-    assert HVACMode.HEAT in climate.hvac_modes
-    await climate.async_set_hvac_mode(HVACMode.HEAT)
-    ready[0].api.async_set_manual.assert_awaited_once_with("zone-1", 21)
+    assert climate.hvac_modes == [HVACMode.OFF, HVACMode.AUTO, expected]
+    await climate.async_set_temperature(hvac_mode=expected, temperature=21.5)
+    coordinator.api.async_set_manual.assert_awaited_once_with("zone-1", 21.5)
 
 
 async def test_failed_climate_mode_restores_ui(ready, api):
@@ -118,7 +124,7 @@ async def test_failed_climate_mode_restores_ui(ready, api):
     api.async_set_off.side_effect = ClientConnectionError()
     with pytest.raises(ClientConnectionError):
         await climate.async_set_hvac_mode(HVACMode.OFF)
-    assert climate.hvac_mode == HVACMode.HEAT
+    assert climate.hvac_mode == HVACMode.HEAT_COOL
 
 
 async def test_boost_requires_confirmed_capability_and_schedule(ready, api):

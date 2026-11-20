@@ -41,23 +41,28 @@ from .util import serialized_command
 _LOGGER = logging.getLogger(__name__)
 
 
-def get_remeha_mode_to_hvac_mode(appliance_type: str) -> dict:
-    """Zachovat původní režim heat pro ruční řízení i u tepelného čerpadla.
+def manual_hvac_mode(can_cool: bool) -> HVACMode:
+    """Stejně jako Hugo vystavit jediný ruční režim podle možností zóny."""
+    return HVACMode.HEAT_COOL if can_cool else HVACMode.HEAT
 
-    Typ zařízení sám nepotvrzuje možnost chlazení. Naměřený stav chlazení
-    se nadále zobrazuje přes hvac_action, bez změny existujících automatizací.
-    """
+
+def get_remeha_mode_to_hvac_mode(can_cool: bool) -> dict:
+    """Převést režim zařízení na nativní stav Home Assistantu."""
     return {
         "Scheduling": HVACMode.AUTO,
         "TemporaryOverride": HVACMode.AUTO,
-        "Manual": HVACMode.HEAT,
+        "Manual": manual_hvac_mode(can_cool),
         "FrostProtection": HVACMode.OFF,
     }
 
 
-def get_hvac_mode_to_remeha_mode(appliance_type: str) -> dict:
-    """Převést pouze původní podporované režimy na požadavek API."""
-    return {HVACMode.AUTO: "Scheduling", HVACMode.HEAT: "Manual", HVACMode.OFF: "FrostProtection"}
+def get_hvac_mode_to_remeha_mode(can_cool: bool) -> dict:
+    """Přiřadit nabízené režimy k povelům zařízení."""
+    return {
+        HVACMode.AUTO: "Scheduling",
+        manual_hvac_mode(can_cool): "Manual",
+        HVACMode.OFF: "FrostProtection",
+    }
 
 
 REMEHA_STATUS_TO_HVAC_ACTION = {
@@ -177,6 +182,7 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
         self.api = api
         self.coordinator: RemehaHomeUpdateCoordinator = coordinator
         self.climate_zone_id = climate_zone_id
+        self._has_cooling_activity: bool | None = None
 
         self._attr_unique_id = "_".join([DOMAIN, self.climate_zone_id])
 
@@ -198,10 +204,28 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
                     return appliance
         return None
 
-    def _get_appliance_type(self) -> str:
-        """Get the appliance type for this climate zone."""
-        appliance_data = self._get_appliance_data()
-        return appliance_data.get("applianceType", "Boiler") if appliance_data else "Boiler"
+    def _can_cool(self) -> bool:
+        """Použít Hugovo pořadí dat o chlazení pro příslušnou zónu.
+
+        Přednost má příznak zóny před příznakem zařízení. Aktivita Cooling
+        chlazení potvrzuje i při záporném příznaku. Při obnově aktivit použij
+        poslední výsledek a před prvním úspěšným načtením Hugův předpoklad
+        pro tepelné čerpadlo. Tato volba sama žádný povel neposílá.
+        """
+        appliance = self._get_appliance_data() or {}
+        capability = self._data.get("capabilityCooling")
+        if capability is None:
+            capability = appliance.get("capabilityCooling")
+        if capability:
+            return True
+        activities = self.coordinator.get_activities(self.climate_zone_id)
+        if activities is not None:
+            self._has_cooling_activity = any(
+                activity.get("type") == "Cooling" for activity in activities
+            )
+        if self._has_cooling_activity is not None:
+            return self._has_cooling_activity
+        return appliance.get("applianceType") == "HeatPump"
 
     def _room_temperature(self) -> float | None:
         """Return the current temperature."""
@@ -235,8 +259,7 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
     def hvac_mode(self) -> HVACMode | None:
         """Return hvac target hvac state."""
         mode = self._data["zoneMode"]
-        appliance_type = self._get_appliance_type()
-        return get_remeha_mode_to_hvac_mode(appliance_type).get(mode)
+        return get_remeha_mode_to_hvac_mode(self._can_cool()).get(mode)
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -318,7 +341,7 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
     @property
     def hvac_modes(self) -> list[HVACMode]:
         """Return the list of available operation modes."""
-        return [HVACMode.OFF, HVACMode.HEAT, HVACMode.AUTO]
+        return [HVACMode.OFF, HVACMode.AUTO, manual_hvac_mode(self._can_cool())]
 
     @property
     def hvac_action(self) -> HVACAction | None:
@@ -391,6 +414,9 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
     @serialized_command("climate_zone_id")
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new operation mode."""
+        mapped_mode = get_hvac_mode_to_remeha_mode(self._can_cool()).get(hvac_mode)
+        if mapped_mode is None:
+            raise ServiceValidationError("Unsupported HVAC mode")
         if recovery := getattr(self.coordinator, "holiday_water_restore", None):
             await recovery.forget_zone(self.climate_zone_id)
         await invalidate_local_export(self)
@@ -399,11 +425,9 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
         _LOGGER.debug("Setting operation mode to %s", hvac_mode)
 
         # Temporarily override the coordinator state until the next poll
-        appliance_type = self._get_appliance_type()
-        hvac_mode_mapping = get_hvac_mode_to_remeha_mode(appliance_type)
         zone_data = self._data
         previous_zone_mode = zone_data["zoneMode"]
-        zone_data["zoneMode"] = hvac_mode_mapping.get(hvac_mode)
+        zone_data["zoneMode"] = mapped_mode
         self.async_write_ha_state()
 
         try:
@@ -441,12 +465,10 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
         target_preset = PRESET_MODE_TO_PRESET_INDEX[preset_mode]
         previous_hvac_mode = self.hvac_mode
 
-        appliance_type = self._get_appliance_type()
-        hvac_mode_mapping = get_hvac_mode_to_remeha_mode(appliance_type)
         zone_data = self._data
         previous_zone_mode = zone_data["zoneMode"]
         previous_preset = zone_data["activeHeatingClimateTimeProgramNumber"]
-        zone_data["zoneMode"] = hvac_mode_mapping.get(HVACMode.AUTO)
+        zone_data["zoneMode"] = "Scheduling"
         zone_data["activeHeatingClimateTimeProgramNumber"] = target_preset
         self.async_write_ha_state()
 

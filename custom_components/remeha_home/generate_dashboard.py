@@ -16,7 +16,7 @@ share a layout; all durations and existing
 diagnostics remain in Details. Confirmed Stop requests the current schedule;
 cloud acceptance is not proof of device execution. Generation sends no command.
 
-Duration presets edit draft minutes in the override card. The card invokes a
+Duration presets edit draft minutes in the themed override card. It invokes a
 shared service with the matching climate entity after confirmation. Power is
 measured in W; negative values are clamped only for display. Missing or
 older-than-180-second readings remain unavailable. Calendar energy is in kWh,
@@ -175,6 +175,8 @@ def generate_dashboard(
     inserted after an explicitly named existing view; new Details follows main.
     Repeated generation updates the two target views in place without duplicates.
     The diagram reads HA state updates through the registered frontend module.
+    The main thermostat takes its native modes from the bound climate entity.
+    Older private templates with a fixed mode list use that same behavior.
     Generation validates its entity roles and preserves the position of the
     diagram and thermometer cards. Private templates can add room sensors
     beside the generic room and outdoor temperature bindings.
@@ -213,7 +215,16 @@ def generate_dashboard(
     def substitute(value: Any) -> Any:
         """Resolve symbolic roles, including Jinja text, without changing inputs."""
         if isinstance(value, dict):
-            return {key: substitute(item) for key, item in value.items()}
+            resolved = {key: substitute(item) for key, item in value.items()}
+            # Termostat Remeha má jedinou variantu ručního režimu podle zóny.
+            # Historický seznam by skryl heat_cool při změně integrace.
+            if resolved.get("type") == "thermostat" and resolved.get("entity") == bindings.get(
+                "CLIMATE"
+            ):
+                for feature in resolved.get("features", []):
+                    if feature.get("type") == "climate-hvac-modes":
+                        feature.pop("hvac_modes", None)
+            return resolved
         if isinstance(value, list):
             return [substitute(item) for item in value]
         if not isinstance(value, str):

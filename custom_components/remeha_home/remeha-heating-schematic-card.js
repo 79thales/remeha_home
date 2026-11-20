@@ -434,6 +434,10 @@ if (!customElements.get('remeha-calendar-card')) customElements.define('remeha-c
 // Ovladač pro oba forky. Návrh teploty a minut zůstává ve formuláři,
 // potvrzený příkaz jde přes společnou službu na jedinou klimatickou entitu.
 class RemehaOverrideCard extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({mode:'open'});
+  }
   setConfig(config) {
     if (!/^climate\.[a-z0-9_]+$/.test(config.entity || '')) {
       throw new Error('Choose one climate entity');
@@ -441,33 +445,101 @@ class RemehaOverrideCard extends HTMLElement {
     this.config = config;
     const cs = config.language === 'cs';
     this.labels = cs ? {
-      temperature: 'Teplota', duration: 'Délka (min)', start: 'Spustit',
+      temperature: 'Teplota', duration: 'Délka', start: 'Spustit',
       stop: 'Vrátit do programu', until: 'Potvrzený konec', unknown: 'Konec není potvrzený.',
       accepted: 'Povel odeslán. Stav potvrzuje zařízení.', unavailable: 'Zóna je nedostupná.',
       invalid: 'Zkontroluj teplotu a délku.', confirm: 'Odeslat povel pro tuto zónu?',
       failed: 'Povel se nepodařilo odeslat.'
     } : {
-      temperature: 'Temperature', duration: 'Duration (min)', start: 'Start',
+      temperature: 'Temperature', duration: 'Duration', start: 'Start',
       stop: 'Return to schedule', until: 'Confirmed end', unknown: 'No confirmed end time.',
       accepted: 'Request sent. The appliance confirms the state.', unavailable: 'Zone unavailable.',
       invalid: 'Check the temperature and duration.', confirm: 'Send the command to this zone?',
       failed: 'Could not send the command.'
     };
-    this.innerHTML = '<ha-card><div style="padding:16px"><p data-end></p><label><span data-temperature></span> <input type="number" style="width:6em"></label> <label><span data-duration></span> <input type="number" inputmode="numeric" min="1" max="10080" step="1" value="60" style="width:6em"></label><p data-presets style="display:flex;flex-wrap:wrap;gap:6px"></p><p><button data-start></button> <button data-stop></button></p><p role="status"></p></div></ha-card>';
-    this.temperature = this.querySelectorAll('input')[0];
-    this.duration = this.querySelectorAll('input')[1];
-    for (const field of ['temperature', 'duration', 'start', 'stop']) {
-      this.querySelector('[data-' + field + ']').textContent = this.labels[field];
+    // Vzhled čerpá barvy, písmo a okraje ze stejného tématu jako termostat.
+    // V úzkém pohledu se tlačítka zalomí bez zmenšování dotykové plochy.
+    this.shadowRoot.innerHTML = `<style>
+      :host { display: block; font: inherit; color: var(--primary-text-color); }
+      .panel { display: grid; gap: 16px; padding: 16px; }
+      .end { display: flex; align-items: center; gap: 8px; min-height: 28px; margin: 0;
+        color: var(--secondary-text-color); font-size: 14px; }
+      .end ha-icon { --mdc-icon-size: 18px; }
+      .end[data-confirmed] { color: var(--state-climate-auto-color, var(--success-color, #388e3c)); }
+      .fields, .actions { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+      .field { display: grid; gap: 4px; min-width: 0; padding: 8px 12px;
+        border: 1px solid var(--divider-color, #ddd); border-radius: 12px;
+        background: var(--secondary-background-color, #f5f5f5); }
+      .field:focus-within { border-color: var(--primary-color, #03a9f4); }
+      .field-title { color: var(--secondary-text-color); font-size: 12px; }
+      .value { display: flex; gap: 6px; align-items: baseline; }
+      .unit { color: var(--secondary-text-color); font-size: 13px; }
+      input { width: 100%; min-width: 0; padding: 0; border: 0; outline: none;
+        background: transparent; color: inherit; font-family: inherit; font-size: 22px;
+        font-weight: 500; }
+      [data-presets] { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+      button { box-sizing: border-box; font: inherit; color: inherit; cursor: pointer;
+        border: 0; border-radius: 12px; padding: 8px 12px;
+        background: var(--secondary-background-color, #f1f1f1); }
+      button:focus-visible { outline: 2px solid var(--primary-color, #03a9f4); outline-offset: 2px; }
+      button:disabled { color: var(--disabled-text-color, #888); cursor: default; }
+      [data-presets] button { min-width: 43px; min-height: 38px; border-radius: 999px;
+        font-size: 14px; font-weight: 600; }
+      [data-presets] button[aria-pressed="true"] { background: var(--accent-color, #03a9f4);
+        color: var(--text-accent-color, #fff); }
+      .actions button { min-height: 44px; display: flex; align-items: center; justify-content: center;
+        gap: 6px; font-weight: 600; }
+      .actions ha-icon { --mdc-icon-size: 18px; }
+      .actions [data-start]:not(:disabled) { background: var(--state-climate-auto-color, var(--success-color, #388e3c));
+        color: var(--text-primary-color, #fff); }
+      [role="status"] { margin: 0; color: var(--secondary-text-color); font-size: 13px; }
+      [role="status"]:empty { display: none; }
+      @container (max-width: 270px) { .actions { grid-template-columns: 1fr; } }
+      ha-card { container-type: inline-size; }
+    </style><ha-card><div class="panel">
+      <p class="end"><ha-icon icon="mdi:timer-outline"></ha-icon><span data-end></span></p>
+      <div class="fields">
+        <label class="field"><span class="field-title" data-temperature></span>
+          <span class="value"><input type="number" inputmode="decimal"><span class="unit">°C</span></span></label>
+        <label class="field"><span class="field-title" data-duration></span>
+          <span class="value"><input type="number" inputmode="numeric" min="1" max="10080" step="1" value="60"><span class="unit">min</span></span></label>
+      </div>
+      <div data-presets></div>
+      <div class="actions">
+        <button type="button" data-start><ha-icon icon="mdi:timer-play-outline"></ha-icon><span></span></button>
+        <button type="button" data-stop><ha-icon icon="mdi:calendar-clock"></ha-icon><span></span></button>
+      </div>
+      <p role="status"></p>
+    </div></ha-card>`;
+    this.temperature = this.shadowRoot.querySelectorAll('input')[0];
+    this.duration = this.shadowRoot.querySelectorAll('input')[1];
+    for (const field of ['temperature', 'duration']) {
+      this.shadowRoot.querySelector('[data-' + field + ']').textContent = this.labels[field];
+    }
+    for (const action of ['start', 'stop']) {
+      this.shadowRoot.querySelector('[data-' + action + '] span').textContent = this.labels[action];
     }
     for (const minutes of config.presets ?? [60,120,240,480]) {
       if (!Number.isInteger(minutes) || minutes < 1 || minutes > 10080) continue;
       const button = document.createElement('button');
       button.textContent = minutes % 60 === 0 ? (minutes / 60) + ' h' : minutes + ' min';
-      button.onclick = () => { this.duration.value = minutes; };
-      this.querySelector('[data-presets]').append(button);
+      button.type = 'button';
+      button.dataset.minutes = minutes;
+      button.onclick = () => {
+        this.duration.value = minutes;
+        this.updatePresets();
+      };
+      this.shadowRoot.querySelector('[data-presets]').append(button);
     }
-    this.querySelector('[data-start]').onclick = () => this.send(false);
-    this.querySelector('[data-stop]').onclick = () => this.send(true);
+    this.duration.oninput = () => this.updatePresets();
+    this.updatePresets();
+    this.shadowRoot.querySelector('[data-start]').onclick = () => this.send(false);
+    this.shadowRoot.querySelector('[data-stop]').onclick = () => this.send(true);
+  }
+  updatePresets() {
+    for (const button of this.shadowRoot.querySelectorAll('[data-minutes]')) {
+      button.setAttribute('aria-pressed', String(Number(button.dataset.minutes) === this.duration.valueAsNumber));
+    }
   }
   set hass(hass) {
     this.ha = hass;
@@ -478,8 +550,11 @@ class RemehaOverrideCard extends HTMLElement {
     // Oba forky vrací místní ISO čas. Prázdný údaj sám nerozliší program
     // od časově neomezeného override, proto zobrazujeme jen potvrzený konec.
     const end = attributes.override_end_time;
-    this.querySelector('[data-end]').textContent = !usable ? this.labels.unavailable :
-      end && !Number.isNaN(Date.parse(end)) ? this.labels.until + ' · ' + new Date(end).toLocaleString() : this.labels.unknown;
+    const confirmed = !!(usable && end && !Number.isNaN(Date.parse(end)));
+    const endLabel = this.shadowRoot.querySelector('[data-end]');
+    endLabel.textContent = !usable ? this.labels.unavailable :
+      confirmed ? this.labels.until + ' · ' + new Date(end).toLocaleString() : this.labels.unknown;
+    endLabel.parentElement.toggleAttribute('data-confirmed', confirmed);
     for (const [name, value] of [['min', attributes.min_temp], ['max', attributes.max_temp], ['step', attributes.target_temp_step ?? 0.5]]) {
       if (Number.isFinite(value)) this.temperature[name] = value;
     }
@@ -487,14 +562,14 @@ class RemehaOverrideCard extends HTMLElement {
       this.temperature.value = attributes.temperature;
       this.initialized = true;
     }
-    this.querySelector('[data-start]').disabled = !!this.busy || state?.state !== 'auto' ||
+    this.shadowRoot.querySelector('[data-start]').disabled = !!this.busy || state?.state !== 'auto' ||
       !hass.services?.remeha_home?.set_temporary_override;
-    this.querySelector('[data-stop]').disabled = !!this.busy || state?.state !== 'auto';
+    this.shadowRoot.querySelector('[data-stop]').disabled = !!this.busy || state?.state !== 'auto';
   }
   async send(stop) {
-    const button = this.querySelector(stop ? '[data-stop]' : '[data-start]');
+    const button = this.shadowRoot.querySelector(stop ? '[data-stop]' : '[data-start]');
     if (button.disabled) return;
-    const status = this.querySelector('[role=status]');
+    const status = this.shadowRoot.querySelector('[role=status]');
     const temperature = this.temperature.valueAsNumber;
     const minutes = this.duration.valueAsNumber;
     if (!stop && (!Number.isFinite(temperature) || !this.temperature.checkValidity() ||
