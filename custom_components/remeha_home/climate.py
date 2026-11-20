@@ -282,7 +282,9 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
         manager = getattr(self.coordinator, "export_override_manager", None)
         record = manager.records.get(self.climate_zone_id) if manager else None
         return {
-            "remeha_zone_mode": mode,
+            # Režim z API pod Hugovým názvem rozliší Scheduling a
+            # TemporaryOverride i tehdy, když oba v Home Assistantu hlásí auto.
+            "zone_mode": mode,
             # Hugův atribut sdílí údaj s původním atributem, který zůstává
             # v podobě API kvůli existujícím automatizacím a dashboardům.
             "override_end_time": dt_util.as_local(end).isoformat()

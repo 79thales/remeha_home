@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.13 — Expose the appliance mode as zone_mode
+
+- Use `zone_mode` for the reported climate zone mode, matching the contract agreed in Hugo's issue #53. Update any templates that referenced `remeha_zone_mode` to the new name.
+- The timed override confirmation and pending command attributes remain available, including the record that survives a restart.
+
 ## v0.5.12 — Preserve zone choices during holiday recovery
 
 - Align holiday recovery decisions with Hugo's PR #52. Off, Frost protection, Eco and cancelling Boost during a holiday keep the original schedule eligible for recovery. Other successful mode commands take priority. Failed commands keep the previous recovery decision.

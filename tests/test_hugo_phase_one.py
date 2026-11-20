@@ -5,10 +5,37 @@ from unittest.mock import patch
 
 import pytest
 from homeassistant.exceptions import ServiceValidationError
+from test_integration import entity
 from test_temporary import draft
 
+from custom_components.remeha_home.climate import RemehaHomeClimateEntity
 from custom_components.remeha_home.energy_history import combine_days, register_energy_history
 from custom_components.remeha_home.temporary import start_override
+
+
+@pytest.mark.parametrize(
+    ("reported_mode", "override_active"),
+    [
+        ("Scheduling", False),
+        ("TemporaryOverride", True),
+        ("Manual", False),
+        ("FrostProtection", False),
+        (None, None),
+    ],
+)
+async def test_zone_mode_attribute_keeps_override_guards(ready, reported_mode, override_active):
+    """Hugovo jméno rozliší oba režimy auto i bez času konce override."""
+    coordinator, _ = ready
+    climate = entity(RemehaHomeClimateEntity, ready, "zone-1")
+    raw = coordinator.get_by_id("zone-1")
+    raw["zoneMode"] = reported_mode
+    raw.pop("temporaryOverride", None)
+    attributes = climate.extra_state_attributes
+    assert attributes["zone_mode"] == reported_mode
+    assert "remeha_zone_mode" not in attributes
+    assert attributes["override_end_time"] is None
+    assert attributes["temporary_override_active"] is override_active
+    assert attributes["temporary_override_command_pending"] is False
 
 
 def test_hybrid_history_and_duplicate_days():
