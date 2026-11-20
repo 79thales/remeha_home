@@ -206,7 +206,10 @@ class RemehaHomeDhwBoostSwitch(CoordinatorEntity, SwitchEntity):
         """Set the zone mode, with a temporary override until the next poll."""
         # Stav potvrzujeme až po úspěchu API. Chyba se vrátí volající službě,
         # zámek se uvolní a další čtení může ověřit výsledek nejistého timeoutu.
-        await api_call(self.hot_water_zone_id)
+        async with self.coordinator.holiday_water_restore.async_zone_command(
+            self.hot_water_zone_id, preserve_during_holiday=mode == "Boost"
+        ):
+            await api_call(self.hot_water_zone_id)
         self._data["dhwZoneMode"] = mode
         self.async_write_ha_state()
         await self.coordinator.async_request_refresh()

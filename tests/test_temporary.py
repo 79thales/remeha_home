@@ -1,5 +1,6 @@
 """Timed override behavior with synthetic zones and a mocked cloud."""
 
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -19,6 +20,7 @@ def draft(zone, journal):
     coordinator.async_request_refresh = AsyncMock()
     coordinator.temporary_pending = journal.records
     coordinator.temporary_override_journal = journal
+    coordinator.holiday_water_restore.async_zone_command.return_value = nullcontext()
     api = Mock()
     api.async_set_temporary_override = AsyncMock()
     return Mock(coordinator=coordinator, api=api, climate_zone_id="synthetic-zone")

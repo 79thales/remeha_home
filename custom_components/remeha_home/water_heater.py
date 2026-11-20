@@ -260,24 +260,26 @@ class RemehaHomeWaterHeater(CoordinatorEntity, WaterHeaterEntity):
         if not self.available or not target_mode:
             raise ServiceValidationError("Hot water mode is unavailable or unsupported")
 
-        await self.coordinator.holiday_water_restore.forget_zone(self.hot_water_zone_id)
-        if target_mode == "ContinuousComfort":
-            await self.api.async_set_dhw_mode_comfort(self.hot_water_zone_id)
-        elif target_mode == "Scheduling":
-            await self.api.async_set_dhw_mode_schedule(self.hot_water_zone_id)
-        elif target_mode == "Off":
-            await self.api.async_set_dhw_mode_eco(self.hot_water_zone_id)
-        elif target_mode == "Boost":
-            if self._data.get("capabilityBoostMode") is not True:
-                raise ServiceValidationError("Boost capability is not confirmed")
-            if self._data.get("dhwZoneMode") != "Scheduling":
-                raise ServiceValidationError(
-                    translation_domain=DOMAIN,
-                    translation_key="boost_requires_schedule",
-                )
-            await self.api.async_set_hot_water_boost(self.hot_water_zone_id)
-        else:
-            return
+        async with self.coordinator.holiday_water_restore.async_zone_command(
+            self.hot_water_zone_id, preserve_during_holiday=target_mode != "Off"
+        ):
+            if target_mode == "ContinuousComfort":
+                await self.api.async_set_dhw_mode_comfort(self.hot_water_zone_id)
+            elif target_mode == "Scheduling":
+                await self.api.async_set_dhw_mode_schedule(self.hot_water_zone_id)
+            elif target_mode == "Off":
+                await self.api.async_set_dhw_mode_eco(self.hot_water_zone_id)
+            elif target_mode == "Boost":
+                if self._data.get("capabilityBoostMode") is not True:
+                    raise ServiceValidationError("Boost capability is not confirmed")
+                if self._data.get("dhwZoneMode") != "Scheduling":
+                    raise ServiceValidationError(
+                        translation_domain=DOMAIN,
+                        translation_key="boost_requires_schedule",
+                    )
+                await self.api.async_set_hot_water_boost(self.hot_water_zone_id)
+            else:
+                return
 
         # Optimistic update until the coordinator polls fresh data
         self._data["dhwZoneMode"] = target_mode

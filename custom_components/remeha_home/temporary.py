@@ -158,6 +158,9 @@ async def start_override(entity, temperature, duration_minutes):
     )
     coordinator.async_update_listeners()
     try:
-        await entity.api.async_set_temporary_override(entity.climate_zone_id, temperature, end_text)
+        async with coordinator.holiday_water_restore.async_zone_command(entity.climate_zone_id):
+            await entity.api.async_set_temporary_override(
+                entity.climate_zone_id, temperature, end_text
+            )
     finally:
         await coordinator.async_request_refresh()

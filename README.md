@@ -39,7 +39,13 @@ The experimental export overlay is an explicit API and is not connected to an au
 - Independent monitoring of new commits in the original integration and the community fork, with a manual check button and links to GitHub comparisons.
 - An offline **dashboard generator**, generic English JSON/YAML templates, synthetic example bindings, a main heating view, and a linked **Details** subview for raw meter data and diagnostics. See [dashboard generation and privacy](documentation/DASHBOARD.md).
 
-Installing, loading, refreshing, and restarting the integration do not issue heating commands. Settings change only when a control or service is used. Feature availability is based on the device response, not an assumed capability of a heat-pump model.
+Feature availability is based on the device response. Heating controls write when used. The holiday recovery described below can also restore a saved schedule after the appliance reports that the holiday has ended.
+
+### Holiday recovery
+
+For a holiday scheduled through this integration, Home Assistant remembers the heating and hot water schedules that were active before the holiday. Recovery needs a device report confirming the holiday mode and a later report confirming that the holiday ended. It restores an eligible zone once if it is still in the holiday mode.
+
+During the holiday, selecting Off or Frost protection for heating, selecting Eco for hot water, or cancelling Boost lets the original schedule resume afterwards. A successful manual, schedule, temporary temperature, Comfort or Boost command preserves the user's choice. A failed command leaves the previous recovery decision intact. If a timed override is still awaiting confirmation, recovery waits for a fresh device report to resolve it. Setting a zone to Off after the holiday keeps it off even if recovery is still pending. Recovery decisions survive a Home Assistant restart.
 
 ## Installation through HACS
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.12 — Preserve zone choices during holiday recovery
+
+- Align holiday recovery decisions with Hugo's PR #52. Off, Frost protection, Eco and cancelling Boost during a holiday keep the original schedule eligible for recovery. Other successful mode commands take priority. Failed commands keep the previous recovery decision.
+- Keep recovery decisions across Home Assistant restarts and serialize a queued recovery with an in-flight command to the same zone. Existing v0.5.11 holiday records can be loaded. For rollback during an active holiday, restore the pre-update holiday journal along with the previous integration.
+
 ## v0.5.11 — Native manual climate mode and dashboard controls
 
 - Manual mode follows the zone's cooling capability as in Hugo's integration. Heating-only zones expose `heat` and cooling-capable zones expose `heat_cool`. Both map to the appliance's Manual mode. Automations that specify an HVAC mode should select the one offered by the target zone.
