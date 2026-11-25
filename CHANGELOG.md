@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.5.14 — Align timed override status and FVE blueprint with Hugo
+
+- Report a valid override end as the same local ISO time as Hugo, even if a transition report already shows Scheduling.
+- Add reusable Czech FVE blueprints. The shared zone script uses its restored HA journal to protect against duplicate temperature requests while allowing OFF.
+- Keep the existing compatibility attributes and native pending checks for direct callers.
+
 ## v0.5.13 — Expose the appliance mode as zone_mode
 
 - Use `zone_mode` for the reported climate zone mode, matching the contract agreed in Hugo's issue #53. Update any templates that referenced `remeha_zone_mode` to the new name.

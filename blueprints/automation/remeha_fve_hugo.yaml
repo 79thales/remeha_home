@@ -1,0 +1,50 @@
+# Stejnou instanci skriptu používejte pro tuto automatizaci i ruční ovládání zóny.
+blueprint:
+  name: Remeha Home – Hugo · spouštěče FVE
+  description: >-
+    Předává změny přetoku, ruční OFF, start HA a minutovou kontrolu
+    společnému skriptu zóny. Skript vyhodnocuje stav a je jediným zapisovatelem.
+  domain: automation
+  input:
+    zone:
+      name: Stejná topná zóna jako ve skriptu
+      selector: {entity: {filter: [{domain: climate, integration: remeha_home}]}}
+    export:
+      name: Stejné měření exportu jako ve skriptu
+      selector: {entity: {filter: [{domain: sensor}]}}
+    zone_control:
+      name: Instance skriptu pro tuto zónu
+      selector: {entity: {filter: [{domain: script}]}}
+
+mode: queued
+max: 20
+trigger_variables:
+  meter: !input export
+triggers:
+  - trigger: time_pattern
+    minutes: "/1"
+    id: tick
+  - trigger: homeassistant
+    event: start
+    id: restart
+  - trigger: state
+    entity_id: !input zone
+    to: "off"
+    id: "off"
+  - trigger: template
+    value_template: "{{ is_number(states(meter)) and states(meter)|float(0) > 100 }}"
+    id: high
+  - trigger: template
+    value_template: "{{ is_number(states(meter)) and states(meter)|float(0) <= 100 }}"
+    id: low
+  - trigger: state
+    entity_id: !input export
+    to: ["unknown", "unavailable"]
+    id: gap
+actions:
+  - alias: Předat událost společnému zapisovateli zóny a počkat na výsledek
+    action: !input zone_control
+    data:
+      requested_zone: !input zone
+      requested_export: !input export
+      fve_event: "{{ trigger.id | default('tick') }}"

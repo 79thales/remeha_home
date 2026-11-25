@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.util import dt as dt_util
 from test_integration import entity
 from test_temporary import draft
 
@@ -36,6 +37,35 @@ async def test_zone_mode_attribute_keeps_override_guards(ready, reported_mode, o
     assert attributes["override_end_time"] is None
     assert attributes["temporary_override_active"] is override_active
     assert attributes["temporary_override_command_pending"] is False
+
+
+@pytest.mark.parametrize("reported_mode", ["Scheduling", "TemporaryOverride", "FrostProtection"])
+@pytest.mark.parametrize(
+    ("raw_end", "parsed_end"),
+    [
+        ("2026-11-25T21:00:00Z", datetime(2026, 11, 25, 21, tzinfo=UTC)),
+        ("2026-11-25T21:00:00", datetime(2026, 11, 25, 21, tzinfo=UTC)),
+        ("0001-01-01T00:00:00Z", None),
+    ],
+)
+async def test_override_end_matches_hugo_independently_of_mode(
+    ready, reported_mode, raw_end, parsed_end
+):
+    """Zveřejnit platný čas i při opožděném poli za cloudovým režimem."""
+    coordinator, _ = ready
+    climate = entity(RemehaHomeClimateEntity, ready, "zone-1")
+    coordinator.get_by_id("zone-1").update(
+        zoneMode=reported_mode, temporaryOverride={"endTime": raw_end}
+    )
+
+    attributes = climate.extra_state_attributes
+    assert attributes["zone_mode"] == reported_mode
+    assert attributes["override_end_time"] == (
+        dt_util.as_local(parsed_end).isoformat() if parsed_end else None
+    )
+    assert attributes["temporary_override_end_time"] == (
+        raw_end if reported_mode == "TemporaryOverride" else None
+    )
 
 
 def test_hybrid_history_and_duplicate_days():

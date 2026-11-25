@@ -263,11 +263,11 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        """Expose cloud-reported state without treating absent data as inactive.
+        """Zveřejnit společné Hugovo rozhraní a atributy starších klientů.
 
-        Both ordinary and timed overrides use TemporaryOverride; this flag
-        cannot identify which client issued the command. The end is a cloud
-        timestamp, not confirmation that a previously sent request succeeded.
+        Cloudový režim a konec v místním ISO formátu jsou nezávislé údaje.
+        Po přepnutí může krátce zůstat starý konec. Vlastnictví override
+        ani potvrzení místního povelu z nich nelze samostatně odvodit.
         """
         data = self._data or {}
         mode = data.get("zoneMode")
@@ -285,10 +285,11 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
             # Režim z API pod Hugovým názvem rozliší Scheduling a
             # TemporaryOverride i tehdy, když oba v Home Assistantu hlásí auto.
             "zone_mode": mode,
-            # Hugův atribut sdílí údaj s původním atributem, který zůstává
-            # v podobě API kvůli existujícím automatizacím a dashboardům.
+            # Stejně jako Hugo zveřejníme platný čas i vedle Scheduling.
+            # Společný skript jej použije jen v nahlášeném TemporaryOverride.
+            # Starší atribut níže si ponechává původní text API.
             "override_end_time": dt_util.as_local(end).isoformat()
-            if mode == "TemporaryOverride" and end is not None and end.year > 1
+            if end is not None and end.year > 1
             else None,
             "temporary_override_active": (mode == "TemporaryOverride")
             if mode in ("TemporaryOverride", "Scheduling", "Manual", "FrostProtection")

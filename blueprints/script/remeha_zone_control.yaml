@@ -1,0 +1,394 @@
+# Blueprint pro jedinou zónu. Pro další zónu vytvořte instanci s vlastními pomocníky.
+# Journal je obnovovaný input_text (max 255, bez initial). Obsahuje stav, začátek
+# souvislé podmínky v sekundách UTC, zónu, program a nejdříve plánovaný, po
+# potvrzení přesný skutečně načtený konec povelu. Journal nikdy nesdílet.
+blueprint:
+  name: Remeha Home – Hugo · povely jedné zóny
+  description: >-
+    Z programu potvrzeného Hugovým atributem zone_mode spustí časovaný override
+    21,5 °C po 5 minutách přetoku nad 100 W,
+    nejdříve v 08:00. Po 60 minutách při nejvýše 100 W požádá o původní program.
+    Čas ukončení v zařízení nastaví na 22:00 místního času. Ruční OFF aktivuje
+    trvalou blokaci. Uvolněte ji vědomě po návratu zóny do programu. Stav a důvod
+    uchovává journal. Po restartu čeká na nové hlášení. Nepotvrzený zápis nepřebírá.
+    Společný journal chrání před dalším nastavením teploty během čekání.
+    FVE a ruční povely ze stejné zóny volejte přes jedinou instanci tohoto skriptu.
+  domain: script
+  input:
+    zone:
+      name: Ověřená topná zóna
+      selector: {entity: {filter: [{domain: climate, integration: remeha_home}]}}
+    verified_zone:
+      name: Entity ID zóny s potvrzeným capabilityTemporaryOverrideEndTime
+      description: Přesné ID z ověřeného mapování. Prázdné pole blokuje cloudové povely.
+      default: ""
+      selector: {text: {}}
+    export:
+      name: Čerstvé měření exportu ve W (kladné hodnoty do sítě)
+      selector: {entity: {filter: [{domain: sensor}]}}
+    schedule_target:
+      name: Current Schedule Setpoint téže zóny ve °C
+      selector: {entity: {filter: [{domain: sensor, integration: remeha_home}]}}
+    block:
+      name: Ruční blokace (samostatný obnovovaný přepínač)
+      selector: {entity: {filter: [{domain: input_boolean}]}}
+    journal:
+      name: Soukromý journal této zóny (text, max 255 znaků)
+      selector: {entity: {filter: [{domain: input_text}]}}
+    online:
+      name: Online stav příslušného zařízení
+      selector: {entity: {filter: [{domain: binary_sensor, integration: remeha_home}]}}
+mode: queued
+max: 20
+fields:
+  requested_zone:
+    description: Přesné ID zóny. Musí odpovídat zóně navázané ve skriptu.
+    required: true
+    selector: {entity: {filter: [{domain: climate, integration: remeha_home}]}}
+  manual_action:
+    description: Povel obsluhy z dashboardu. Automatizace místo něj předává událost FVE.
+    selector: {select: {options: [override, resume, program, mode, temperature]}}
+  preset:
+    description: Nativní předvolba Clock Program potvrzená zónou.
+    selector: {select: {options: [clock_program_1, clock_program_2, clock_program_3]}}
+  temperature:
+    description: Požadovaná teplota ve °C v rozsahu nastaveném pro zónu.
+    selector: {number: {unit_of_measurement: "°C", mode: box}}
+  minutes:
+    description: Délka ručního časovaného override v celých minutách.
+    selector: {number: {min: 1, max: 10080, unit_of_measurement: min, mode: box}}
+  mode:
+    description: Ručně zvolený nativní režim zóny. Návrat do programu řeší povel resume.
+    selector: {select: {options: ["off", heat, heat_cool]}}
+sequence:
+  - variables:
+      zone: !input zone
+      verified_zone: !input verified_zone
+      export: !input export
+      schedule_target: !input schedule_target
+      online: !input online
+      block: !input block
+      journal: !input journal
+  - alias: Odmítnout požadavek chybně navázaného ovládacího prvku nebo měřidla
+    if: >-
+      {{ requested_zone | default('') != zone or
+         (manual_action is not defined and requested_export | default('') != export) }}
+    then:
+      - stop: Požadavek neodpovídá zóně nebo měřidlu navázanému ve skriptu.
+        error: true
+  - alias: Načíst obnovovaný záměr, čas posledního hlášení měřidla a aktivní program
+    variables:
+      # Prázdný nebo poškozený helper znamená ztrátu evidence. Novou instalaci
+      # obsluha jednorázově inicializuje J:{} po čtecí kontrole termostatu.
+      old: "{{ states(journal)[2:] | from_json(dict(p='invalid')) if states(journal).startswith('J:') else dict(p='invalid') }}"
+      ts: "{{ as_timestamp(now()) }}"
+      close: "{{ as_timestamp(today_at('22:00')) | int }}"
+      window: "{{ today_at('08:00') <= now() < today_at('22:00') }}"
+      event: "{{ fve_event | default('tick') }}"
+      # Stejné ID zóny, jednotky, živé hlášení a vazba na nadřazený přístroj.
+      # last_reported dokládá zápis do HA, nemůže dosvědčit stáří cache v cloudu.
+      topology: >-
+        {{ zone == verified_zone and device_id(zone) is not none
+           and device_id(schedule_target) == device_id(zone) and device_id(online) is not none
+           and device_attr(device_id(zone),'via_device_id') == device_id(online) }}
+      reported: "{{ as_timestamp(states[zone].last_reported,0) if has_value(zone) else 0 }}"
+      scheduled_report: "{{ as_timestamp(states[schedule_target].last_reported,0) if has_value(schedule_target) else 0 }}"
+      # Dostupnost a režim vyhodnocujeme z rozhraní společného s Hugem.
+      # Právě odeslanou operaci sleduje obnovovaný journal této fronty.
+      ready: >-
+        {{ topology and is_state(online,'on') and is_state(zone,'auto') and has_value(schedule_target)
+           and 'override_end_time' in states[zone].attributes
+           and not states[zone].attributes.get('restored',false)
+           and not states[schedule_target].attributes.get('restored',false)
+           and 0 <= ts - reported <= 180 and 0 <= ts - scheduled_report <= 180
+           and 0 <= ts - as_timestamp(states[online].last_reported,0) <= 180 }}
+      # Obě hodnoty jsou v HA auto. Jedině Scheduling dovolí nový povel
+      # nebo potvrdí návrat. TemporaryOverride může existovat bez času konce.
+      zone_mode: "{{ state_attr(zone,'zone_mode') }}"
+      blocked: "{{ not is_state(block,'off') }}"
+      watts: "{{ states(export) | float(0) }}"
+      valid: >-
+        {{ is_number(states(export)) and state_attr(export,'unit_of_measurement') == 'W'
+           and 0 <= as_timestamp(now()) - as_timestamp(states[export].last_reported,0) <= 180 }}
+      # API může ponechat staré pole s koncem i po návratu do Scheduling.
+      # Čas v epochových sekundách je použitelný jen v TemporaryOverride.
+      end: >-
+        {{ as_timestamp(state_attr(zone,'override_end_time'), -1) | int
+           if zone_mode == 'TemporaryOverride' and state_attr(zone,'override_end_time') is not none
+           else 0 }}
+      target: "{{ state_attr(zone,'temperature') | float(-999) }}"
+      follows: >-
+        {{ state_attr(schedule_target,'unit_of_measurement') == '°C' and is_number(states(schedule_target))
+           and is_number(state_attr(zone,'temperature'))
+           and (states(schedule_target)|float(0) - state_attr(zone,'temperature')|float(-999))|abs < 0.1 }}
+      program: "{{ state_attr(zone,'preset_mode') }}"
+  # Ruční a FVE povely mění stejný journal uvnitř jedné fronty. Ruční povel
+  # přebírá vlastnictví před voláním služby, takže pozdější FVE stop už nemůže
+  # zrušit jeho teplotu. Po chybě povel neopakujeme a ruční ochrana se neodstraní.
+  - alias: Předat zónu obsluze a provést právě jeden ruční povel
+    if: "{{ manual_action is defined }}"
+    then:
+      - alias: Ověřit dostupnost, rozsah a podporu ručního povelu
+        if: >-
+          {% set limits = is_number(temperature | default(none))
+            and state_attr(zone,'min_temp')|float(999) <= temperature|float
+              <= state_attr(zone,'max_temp')|float(-999) %}
+          {{ not has_value(journal) or old is not mapping
+             or (old and (old.get('z') != zone or old.get('p') == 'invalid'))
+             or states(block) not in ['on','off'] or not has_value(zone)
+             or states[zone].attributes.get('restored',false)
+             or not is_state(online,'on') or device_id(zone) is none
+             or device_id(online) is none
+             or device_attr(device_id(zone),'via_device_id') != device_id(online)
+             or manual_action not in ['override','resume','program','mode','temperature']
+             or (manual_action == 'override' and (zone != verified_zone or not is_state(zone,'auto') or not limits
+                 or not is_number(minutes | default(none))
+                 or not 1 <= minutes|float <= 10080 or minutes|float != minutes|int))
+             or (manual_action == 'temperature' and (not limits or is_state(zone,'off')))
+             or (manual_action == 'resume' and 'auto' not in (state_attr(zone,'hvac_modes') or []))
+             or (manual_action == 'program' and (preset | default('') not in
+                 ['clock_program_1','clock_program_2','clock_program_3']
+                 or preset not in (state_attr(zone,'preset_modes') or [])))
+             or (manual_action == 'mode' and (mode | default('') not in ['off','heat','heat_cool']
+                 or mode not in (state_attr(zone,'hvac_modes') or []))) }}
+        then:
+          - stop: Zóna, deník nebo parametry ručního povelu nejsou připravené.
+            error: true
+      # Neshodný nebo starý report po FVE povelu znamená, že další požadavek
+      # na teplotu počká. Kontrola běží ve stejné frontě před změnou deníku.
+      # Rozpracovaný povel zůstane evidovaný i po restartu. Povel OFF má
+      # přednost a může projít při zpracování svého požadavku. Čerstvá shoda
+      # dovolí ruční změnu teploty, i když zatím neproběhl minutový tick.
+      - alias: Odmítnout další teplotu při nepotvrzeném FVE povelu
+        if: >-
+          {% set confirmed = ready and zone_mode == 'TemporaryOverride'
+              and target == 21.5 and program == old.get('c')
+              and end > ts and (end - (old.get('e') | float(0))) | abs <= 45
+              and reported > (old.get('s') | float(ts))
+              and scheduled_report > (old.get('s') | float(ts)) %}
+          {{ manual_action in ['override', 'temperature']
+             and old.get('p') in ['pending', 'sent'] and not confirmed }}
+        then:
+          - stop: Předchozí časovaný povel FVE ještě čeká na potvrzení zóny.
+            error: true
+      - variables:
+          # Při návratu ze stále zobrazeného Scheduling mohl být předchozí
+          # povel ještě na cestě. Ponecháme jeho bezpečný časový horizont.
+          manual_due: >-
+            {% if manual_action == 'override' %}
+              {{ (ts + minutes|int * 60)|round(0,'ceil')|int }}
+            {% elif manual_action in ['resume','program'] and zone_mode == 'Scheduling' %}
+              {{ old.get('e',0) }}
+            {% else %}
+              0
+            {% endif %}
+          manual_record: >-
+            {{ dict(p='manual_pending' if manual_action in ['resume','program'] else 'manual_hold',
+                    s=ts,e=manual_due,c=preset if manual_action == 'program' else '',
+                    r='ruční ovládání',z=zone) }}
+      - if: "{{ manual_action == 'mode' and mode == 'off' and is_state(block,'off') }}"
+        then:
+          - action: input_boolean.turn_on
+            target: {entity_id: !input block}
+      - action: input_text.set_value
+        target: {entity_id: !input journal}
+        data: {value: "J:{{ manual_record | to_json }}"}
+      - if: >-
+          {{ states(journal)[2:] | from_json({}) != manual_record
+             or not has_value(zone) or not is_state(online,'on') }}
+        then:
+          - stop: Ruční povel vyžaduje uložený záměr a dostupnou zónu.
+            error: true
+      - choose:
+          - conditions: "{{ manual_action == 'override' }}"
+            sequence:
+              - action: remeha_home.set_temporary_override
+                target: {entity_id: !input zone}
+                data:
+                  temperature: "{{ temperature | float }}"
+                  duration: {minutes: "{{ minutes | int }}"}
+          - conditions: "{{ manual_action == 'temperature' }}"
+            sequence:
+              - action: climate.set_temperature
+                target: {entity_id: !input zone}
+                data: {temperature: "{{ temperature | float }}"}
+          - conditions: "{{ manual_action == 'program' }}"
+            sequence:
+              - action: climate.set_preset_mode
+                target: {entity_id: !input zone}
+                data: {preset_mode: "{{ preset }}"}
+        default:
+          - action: climate.set_hvac_mode
+            target: {entity_id: !input zone}
+            data: {hvac_mode: "{{ 'auto' if manual_action == 'resume' else mode }}"}
+      # Chyba služby, přerušení nebo restart před uložením nechá zónu pod ruční
+      # ochranou. O návratu uvažujeme až po nové zprávě následující po službě.
+      - if: "{{ manual_action in ['resume','program'] }}"
+        then:
+          - action: input_text.set_value
+            target: {entity_id: !input journal}
+            data:
+              value: >-
+                J:{{ dict(manual_record,p='manual_return',s=as_timestamp(now()),e=manual_due)
+                     | to_json }}
+      - if: "{{ manual_action == 'override' }}"
+        then:
+          - action: input_text.set_value
+            target: {entity_id: !input journal}
+            data:
+              value: >-
+                J:{{ dict(manual_record,s=as_timestamp(now()),
+                          e=(as_timestamp(now()) + minutes|int * 60)|round(0,'ceil')|int)
+                     | to_json }}
+      - stop: Ruční povel odeslán. Stav potvrdí příští hlášení zóny.
+  # Výstup rozhodnutí je jediný slovník. Fáze pending/stopping nesmějí opakovat
+  # nejistý zápis. Po chybě zůstává termín v zařízení nejzazší ochranou.
+  - alias: Vyhodnotit prioritu OFF, vlastnictví, časové okno a nepřerušenou dobu
+    variables:
+      plan: >-
+        {% set p = old.get('p','idle') if old is mapping else 'invalid' %}
+        {% set since = old.get('s',ts) if old is mapping else ts %}
+        {% set due = old.get('e',0) if old is mapping else 0 %}
+        {% set preset = old.get('c','') if old is mapping else '' %}
+        {% set scheduling = zone_mode == 'Scheduling' %}
+        {% set overriding = zone_mode == 'TemporaryOverride' %}
+        {% set mine = overriding and end > ts and target == 21.5 and preset == program and
+            ((p == 'sent' and (end-due)|abs <= 45) or (p in ['active','low','resuming','stopping'] and end == due)) %}
+        {% set cmd = 'none' %}
+        {% set why = old.get('r','čekání') if old is mapping else 'neplatný journal' %}
+        {% set prog_ok = program in ['clock_program_1','clock_program_2','clock_program_3'] %}
+        {% if event == 'off' or is_state(zone,'off') %}
+          {% set since = since if p == 'idle' and why == 'ruční OFF' else ts %}
+          {% set p,due,preset,why,cmd = 'idle',0,'','ruční OFF','block' %}
+        {% elif old is not mapping or (old and old.get('z') != zone) %}
+          {% set p,since,why = 'invalid',ts,'journal jiné zóny' %}
+        {% elif p in ['manual_hold','manual_pending','manual_return'] %}
+          {% if event == 'restart' %}
+            {% set since = ts %}
+          {% elif ready and scheduling and end == 0 and prog_ok and follows
+              and reported > since and scheduled_report > since
+              and (not preset or preset == program)
+              and (p == 'manual_return' or (p == 'manual_hold' and due > 0)) and ts >= due %}
+            {% set p,since,due,preset,why = 'idle',ts,0,'','program po ručním zásahu potvrzen' %}
+          {% endif %}
+        {% elif event == 'restart' and p in ['sent','pending'] %}
+          {% set p,since,why = 'pending',ts,'nepotvrzený povel po restartu' %}
+        {% elif event == 'restart' and p in ['active','low','resuming','stopping','stop_pending'] %}
+          {% set p,since,why = (p if p in ['stopping','stop_pending'] else 'resuming'),ts,'čekání na nové hlášení po restartu' %}
+        {% elif p in ['pending','sent','active','low','resuming','stopping','stop_pending'] and (is_state(zone,'heat') or is_state(zone,'heat_cool')) %}
+          {% set p,since,due,preset,why = 'idle',ts,0,'','ruční režim zóny' %}
+        {% elif p in ['pending','sent','active','low','resuming','stopping','stop_pending'] %}
+          {% if ready and scheduling and end == 0 and prog_ok and follows and reported > since and scheduled_report > since and (p not in ['pending','sent','stop_pending'] or ts >= due) %}
+            {% set why = 'jiný program' if program != preset else
+               ('program potvrzen' if p == 'stopping' or ts >= due else 'předčasný návrat do programu') %}
+            {% set p,since,due,preset = 'idle',ts,0,'' %}
+          {% elif ready and overriding and (end == 0 or end > ts) and not mine and reported > since and (p not in ['pending','sent','stop_pending'] or ts >= due) %}
+            {% set p,since,due,preset,why = 'idle',ts,0,'','cizí override' %}
+          {% elif ready and mine and p not in ['pending','stopping'] and (p not in ['sent','resuming'] or reported > since) %}
+            {% set due = end %}
+            {% if not window or blocked %}
+              {% set p,since,why,cmd = 'stop_pending',ts,'konec okna nebo blokace','stop' %}
+            {% elif not valid or watts > 100 or event in ['restart','gap','high'] %}
+              {% set p,since,why = 'active',(since if p == 'active' else ts),'potvrzeno zařízením' %}
+            {% elif p != 'low' %}
+              {% set p,since,why = 'low',ts,'nedostatečný export' %}
+            {% elif ts-since >= 3600 %}
+              {% set p,since,why,cmd = 'stop_pending',ts,'60 min bez přetoku','stop' %}
+            {% endif %}
+          {% elif p == 'low' %}
+            {% set p,since,why = 'active',ts,'přerušené měření' %}
+          {% endif %}
+        {% elif p in ['idle','high'] %}
+          {% if not ready or not scheduling or not follows or blocked or not valid or not window or end or not prog_ok or watts <= 100 or event in ['restart','gap','low'] %}
+            {% set p,since = 'idle',ts if p != 'idle' else since %}
+          {% elif p != 'high' %}
+            {% set p,since,why = 'high',ts,'export nad 100 W' %}
+          {% elif ts-since >= 300 and close-ts >= 65 %}
+            {% set p,since,due,preset,why,cmd = 'pending',ts,close,program,'5 min přetoku','start' %}
+          {% endif %}
+        {% endif %}
+        {{ dict(cmd=cmd,p=p,s=since,e=due,c=preset,r=why) }}
+  - alias: Trvale zachovat ochranu po ručním vypnutí i při restartu
+    if: "{{ plan.cmd == 'block' and is_state(block,'off') }}"
+    then:
+      - action: input_boolean.turn_on
+        target: {entity_id: !input block}
+  - variables:
+      record: "{{ dict(p=plan.p,s=plan.s,e=plan.e,c=plan.c,r=plan.r,z=zone) }}"
+  - alias: Zapsat pouze změněný journal před případným cloudovým povelem
+    if: "{{ has_value(journal) and old is mapping and (not old or old.get('z') == zone) and old.get('p') != 'invalid' and old != record }}"
+    then:
+      - action: input_text.set_value
+        target: {entity_id: !input journal}
+        data: {value: "J:{{ record | to_json }}"}
+  - alias: Ověřit uložení záměru před zápisem do zařízení
+    condition: template
+    value_template: >-
+      {{ plan.cmd in ['start','stop'] and states(journal).startswith('J:')
+         and states(journal)[2:] | from_json({}) == record }}
+  - alias: Přezkoumat stáří a dostupnost všech podkladů po uložení journalu
+    variables:
+      writable: >-
+        {% set t = as_timestamp(now()) %}
+        {% set ns = namespace(ok=true) %}
+        {% for id in [zone,schedule_target,online] %}
+          {% if not has_value(id) or states[id].attributes.get('restored',false)
+                or not 0 <= t-as_timestamp(states[id].last_reported,0) <= 180 %}
+            {% set ns.ok = false %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.ok and zone == verified_zone and device_id(zone) is not none
+           and device_id(schedule_target) == device_id(zone) and device_id(online) is not none
+           and device_attr(device_id(zone),'via_device_id') == device_id(online) }}
+  - alias: Poslední kontrola jediné zóny před odesláním povelu
+    choose:
+      - conditions: >-
+          {{ writable and plan.cmd == 'start' and is_state(zone,'auto') and is_state(block,'off')
+             and state_attr(zone,'zone_mode') == 'Scheduling'
+             and is_state(online,'on') and state_attr(zone,'preset_mode') == plan.c
+             and 'override_end_time' in states[zone].attributes
+             and is_number(states(schedule_target)) and state_attr(schedule_target,'unit_of_measurement') == '°C'
+             and (states(schedule_target)|float(-999) - state_attr(zone,'temperature')|float(-555))|abs < 0.1
+             and is_number(states(export)) and states(export)|float(0) > 100 and state_attr(export,'unit_of_measurement') == 'W'
+             and 0 <= as_timestamp(now())-as_timestamp(states[export].last_reported,0) <= 180
+             and close-as_timestamp(now()) >= 60 }}
+        sequence:
+          - action: remeha_home.set_temporary_override
+            target: {entity_id: !input zone}
+            data:
+              temperature: 21.5
+              duration: {seconds: "{{ (close-as_timestamp(now()))|int }}"}
+          # Až úspěšný návrat služby opravňuje k pozdějšímu párování odpovědi.
+          # Pád, timeout nebo odmítnutí ponechá pending bez oprávnění zapisovat.
+          - action: input_text.set_value
+            target: {entity_id: !input journal}
+            data: {value: "J:{{ dict(record,p='sent',s=as_timestamp(now())) | to_json }}"}
+      - conditions: >-
+          {{ writable and plan.cmd == 'stop' and is_state(zone,'auto') and is_state(online,'on')
+             and state_attr(zone,'zone_mode') == 'TemporaryOverride'
+             and state_attr(zone,'preset_mode') == plan.c and state_attr(zone,'temperature')|float(-999) == 21.5
+             and plan.e > as_timestamp(now()) and as_timestamp(state_attr(zone,'override_end_time'),0)|int == plan.e
+             and (not window or is_state(block,'on') or
+                (is_number(states(export)) and states(export)|float(999) <= 100 and state_attr(export,'unit_of_measurement') == 'W'
+                and 0 <= as_timestamp(now())-as_timestamp(states[export].last_reported,0) <= 180)) }}
+        sequence:
+          - action: climate.set_hvac_mode
+            target: {entity_id: !input zone}
+            data: {hvac_mode: auto}
+          # Hugo může zapsat optimistický režim před návratem služby. Počkáme
+          # na hlášení obou entit až po dokončení volání; nejasný stop neopakujeme.
+          - action: input_text.set_value
+            target: {entity_id: !input journal}
+            data: {value: "J:{{ dict(record,p='stopping',s=as_timestamp(now())) | to_json }}"}
+    # Při nesplněné poslední kontrole nebyla služba vůbec volána. Přerušenou
+    # dobu exportu začneme měřit znovu. U stopu zůstává původní identita override.
+    default:
+      - condition: template
+        value_template: "{{ states(journal)[2:] | from_json({}) == record }}"
+      - action: input_text.set_value
+        target: {entity_id: !input journal}
+        data:
+          value: >-
+            J:{{ dict(record,p='idle' if plan.cmd=='start' else 'active',
+                      s=as_timestamp(now()),e=0 if plan.cmd=='start' else record.e,
+                      r='stav se změnil před zápisem') | to_json }}
